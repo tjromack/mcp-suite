@@ -71,16 +71,16 @@ the forward roadmap for portfolio polish.
 - [x] Record demo GIF of Claude Desktop interaction; embedded in README (`docs/demo.gif`)
 - [x] Final README pass: fixed schema-apply command (PowerShell), multi-query example, Claude Desktop §, added Performance + Troubleshooting, updated structure
 - [x] Repo initialized + pushed to **private** GitHub repo `tjromack/clinical-mcp` (`.env` & `.claude/settings.local.json` excluded; `uv.lock` + `.gitattributes` tracked; initial commit `e1c9ccb`)
-- [ ] Tag `v0.1.0` release + write release notes (**USER**: optional next — say the word and I'll draft notes + tag)
+- [x] Tag `v0.1.0` release + release notes — annotated tag `v0.1.0`, GitHub release published (https://github.com/tjromack/clinical-mcp/releases/tag/v0.1.0)
 - [ ] **Ship it**: share on LinkedIn/Twitter with the demo GIF (**USER**: personal action; flip repo public when ready)
 
 ## Phase 4 — Portfolio Polish & Future Work
 > Goal: maximize "this person is a strong engineer" signal before flipping public. Tiered by ROI.
 
-### Tier 1 — do before public (high signal, low effort)
-- [ ] **GitHub Actions CI** — run `ruff check`, `ruff format --check`, `pytest` on push/PR; status badge in README. Single biggest credibility signal for a portfolio repo.
-- [ ] **`docs/DESIGN.md`** — write up the real engineering trade-offs hit during the build: Akamai Bot Manager → `curl_cffi` impersonation; Anthropic has no embeddings API → Voyage pairing; TLS-intercepting proxy → `truststore` + `uv --native-tls`; FastMCP core/wrapper split; honest "ivfflat not used at 20 rows, correct planner behavior" finding. Turns a project into demonstrated judgment.
-- [ ] **`v0.1.0` tag + GitHub release** with release notes (tools, dataset size, known limitations, the proxy/Akamai notes).
+### Tier 1 — do before public (high signal, low effort) ✅ DONE
+- [x] **GitHub Actions CI** — `.github/workflows/ci.yml` runs `ruff check`, `ruff format --check`, `pytest` on push/PR; green; badge in README.
+- [x] **`docs/DESIGN.md`** — architecture + trade-offs + build war-stories (Akamai/curl_cffi, TLS proxy/truststore, Voyage pairing, FastMCP core/wrapper, honest ivfflat finding).
+- [x] **`v0.1.0` tag + GitHub release** with release notes (tools, stack, dataset, known limitations).
 
 ### Tier 2 — solid depth (moderate effort)
 - [ ] **Batch embedding in ingest** — one Voyage call per `--batch-size` group instead of per-trial (perf + cost; matters now at 562 rows). Add `embed_texts()` to `embeddings.py`, keep `embed_text()` as the single-text path.
