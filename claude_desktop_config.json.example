@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "clinical-trials": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "C:\\ABSOLUTE\\PATH\\TO\\clinical-mcp",
+        "python",
+        "-m",
+        "clinical_trial_mcp.server"
+      ],
+      "env": {
+        "UV_NATIVE_TLS": "1"
+      }
+    }
+  }
+}

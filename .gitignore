@@ -1,0 +1,35 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# uv (uv.lock IS committed — reproducible installs)
+.uv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code local (developer-specific permission allowlist)
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Postgres data (if mounted locally)
+pgdata/
