@@ -2,6 +2,8 @@
 
 > Semantic search over ClinicalTrials.gov — as an MCP tool your AI assistant can actually use.
 
+**Status:** v0.1 — all 3 tools working, 562 trials ingested, validated end-to-end in Claude Desktop. 17 tests passing, `ruff`-clean. See [TODO.md](TODO.md) for the roadmap.
+
 ---
 
 ## What It Is
@@ -60,8 +62,8 @@ Clinical trial eligibility criteria are notoriously hard to parse — dense medi
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/your-username/clinical-trial-mcp.git
-cd clinical-trial-mcp
+git clone https://github.com/tjromack/clinical-mcp.git
+cd clinical-mcp
 uv sync
 ```
 

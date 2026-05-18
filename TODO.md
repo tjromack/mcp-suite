@@ -1,5 +1,10 @@
 # TODO — Clinical-Trial Search MCP Server
 
+**Status (2026-05): Phases 1–3 complete.** Server works end-to-end in Claude
+Desktop with 562 ingested trials; 17 tests passing, `ruff`-clean; pushed to a
+private GitHub repo. Phases 1–3 below are kept as the build record. Phase 4 is
+the forward roadmap for portfolio polish.
+
 ## Phase 1 — Core Infrastructure & Data Pipeline
 > Goal: Postgres running with pgvector, schema applied, 500+ trials ingested and embedded, all verifiable via `psql`.
 
@@ -68,3 +73,24 @@
 - [x] Repo initialized + pushed to **private** GitHub repo `tjromack/clinical-mcp` (`.env` & `.claude/settings.local.json` excluded; `uv.lock` + `.gitattributes` tracked; initial commit `e1c9ccb`)
 - [ ] Tag `v0.1.0` release + write release notes (**USER**: optional next — say the word and I'll draft notes + tag)
 - [ ] **Ship it**: share on LinkedIn/Twitter with the demo GIF (**USER**: personal action; flip repo public when ready)
+
+## Phase 4 — Portfolio Polish & Future Work
+> Goal: maximize "this person is a strong engineer" signal before flipping public. Tiered by ROI.
+
+### Tier 1 — do before public (high signal, low effort)
+- [ ] **GitHub Actions CI** — run `ruff check`, `ruff format --check`, `pytest` on push/PR; status badge in README. Single biggest credibility signal for a portfolio repo.
+- [ ] **`docs/DESIGN.md`** — write up the real engineering trade-offs hit during the build: Akamai Bot Manager → `curl_cffi` impersonation; Anthropic has no embeddings API → Voyage pairing; TLS-intercepting proxy → `truststore` + `uv --native-tls`; FastMCP core/wrapper split; honest "ivfflat not used at 20 rows, correct planner behavior" finding. Turns a project into demonstrated judgment.
+- [ ] **`v0.1.0` tag + GitHub release** with release notes (tools, dataset size, known limitations, the proxy/Akamai notes).
+
+### Tier 2 — solid depth (moderate effort)
+- [ ] **Batch embedding in ingest** — one Voyage call per `--batch-size` group instead of per-trial (perf + cost; matters now at 562 rows). Add `embed_texts()` to `embeddings.py`, keep `embed_text()` as the single-text path.
+- [ ] **Broaden test coverage** — add tests for `ctgov.py` (mock `curl_cffi`), `embeddings.py` (retry/truncation/empty-guard), `config.py`. Currently only the 3 tools are unit-tested.
+- [ ] **Static typing in CI** — `mypy` or `pyright` gate.
+- [ ] **Architecture diagram** in README (client → FastMCP → tools → pgvector / CT.gov / Voyage / Claude).
+
+### Tier 3 — feature depth (scope-dependent, optional)
+- [ ] **Hybrid search** — combine pgvector cosine with Postgres full-text (`tsvector`) for better recall on rare terms; optional re-rank.
+- [ ] **Response cache** for `get_trial_details` (TTL) — avoids repeat live API hits on the same NCT ID.
+- [ ] **More tools** — `find_similar_trials(nct_id)`, structured filters (phase/condition/date), pagination for `search_trials`.
+- [ ] **Containerize the MCP server** itself (not just Postgres) for one-command bring-up.
+- [ ] **Larger / themed dataset** — multi-`--query` ingest across disease areas; document corpus composition.
