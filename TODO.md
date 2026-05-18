@@ -63,7 +63,8 @@
 - [x] Performance: confirmed via `EXPLAIN ANALYZE` — planner correctly seq-scans the tiny demo table; `enable_seqscan=off` proves `trials_embedding_idx` is valid and used at scale; documented in README §Performance
 - [x] End-to-end Claude Desktop test — connector loads as "clinical-trials" (LOCAL DEV), 3 tools registered & grouped as read-only; all 3 (`search_trials`, `get_trial_details`, `summarize_eligibility`) returned expected responses in a live Claude Desktop chat
   - [x] Also previously validated via MCP Inspector against real DB + APIs
-- [ ] Record demo GIF / screenshot of Claude Desktop interaction; embed in README (**USER**: manual capture; README Demo section has the placeholder)
+- [x] Record demo GIF of Claude Desktop interaction; embedded in README (`docs/demo.gif`)
 - [x] Final README pass: fixed schema-apply command (PowerShell), multi-query example, Claude Desktop §, added Performance + Troubleshooting, updated structure
-- [ ] Tag `v0.1.0` release on GitHub; write release notes (**USER**: repo is not yet a git repo — needs `git init`, GitHub remote)
-- [ ] **Ship it**: push to GitHub, share on LinkedIn/Twitter (**USER**: requires the above + demo GIF)
+- [x] Repo initialized + pushed to **private** GitHub repo `tjromack/clinical-mcp` (`.env` & `.claude/settings.local.json` excluded; `uv.lock` + `.gitattributes` tracked; initial commit `e1c9ccb`)
+- [ ] Tag `v0.1.0` release + write release notes (**USER**: optional next — say the word and I'll draft notes + tag)
+- [ ] **Ship it**: share on LinkedIn/Twitter with the demo GIF (**USER**: personal action; flip repo public when ready)
