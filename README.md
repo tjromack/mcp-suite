@@ -2,7 +2,11 @@
 
 > Semantic search over ClinicalTrials.gov — as an MCP tool your AI assistant can actually use.
 
+[![CI](https://github.com/tjromack/clinical-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/clinical-mcp/actions/workflows/ci.yml)
+
 **Status:** v0.1 — all 3 tools working, 562 trials ingested, validated end-to-end in Claude Desktop. 17 tests passing, `ruff`-clean. See [TODO.md](TODO.md) for the roadmap.
+
+📐 **[docs/DESIGN.md](docs/DESIGN.md)** — architecture, design decisions, and the real constraints hit during the build (Akamai bot protection, TLS-intercepting proxy, pgvector planner behavior). Worth reading.
 
 ---
 
