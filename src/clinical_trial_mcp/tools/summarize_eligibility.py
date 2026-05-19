@@ -11,6 +11,7 @@ import logging
 
 import asyncpg
 from anthropic import AsyncAnthropic
+from anthropic.types import TextBlock
 from mcp.types import TextContent
 
 from clinical_trial_mcp.config import settings
@@ -97,7 +98,7 @@ async def summarize_eligibility(
         )
 
         text = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
+            block.text for block in response.content if isinstance(block, TextBlock)
         ).strip()
         if not text:
             text = "Claude returned an empty summary."

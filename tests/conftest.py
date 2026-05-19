@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from anthropic.types import TextBlock
 
 
 class _AcquireCtx:
@@ -44,9 +45,14 @@ def mock_pool(mock_conn: MagicMock) -> MagicMock:
 
 @pytest.fixture
 def anthropic_text_response() -> SimpleNamespace:
-    """Shape of anthropic client.messages.create(...) return value."""
-    block = SimpleNamespace(
+    """Shape of anthropic client.messages.create(...) return value.
+
+    Uses a real `TextBlock` so the tool's `isinstance(block, TextBlock)`
+    narrowing is exercised, not bypassed by a duck-typed stand-in.
+    """
+    block = TextBlock(
         type="text",
         text="Inclusion criteria:\n- Age >= 18\n\nExclusion criteria:\n- Pregnancy",
+        citations=None,
     )
     return SimpleNamespace(content=[block])

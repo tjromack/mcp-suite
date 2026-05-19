@@ -38,8 +38,8 @@ def _format_study(study: dict) -> str:
 
     phases = design_mod.get("phases") or []
     conditions = cond_mod.get("conditions") or []
-    interventions = [
-        i.get("name")
+    interventions: list[str] = [
+        str(i["name"])
         for i in (arms_mod.get("interventions") or [])
         if isinstance(i, dict) and i.get("name")
     ]
