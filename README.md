@@ -50,6 +50,50 @@ Clinical trial eligibility criteria are notoriously hard to parse — dense medi
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart LR
+    client["MCP client<br/>(Claude Desktop / MCP Inspector)"]
+
+    subgraph server["FastMCP server (stdio)"]
+        direction TB
+        lifespan["lifespan:<br/>asyncpg pool open/close"]
+        st["search_trials"]
+        gtd["get_trial_details"]
+        se["summarize_eligibility"]
+    end
+
+    subgraph ext["External services"]
+        voyage["Voyage AI<br/>embeddings"]
+        anthropic["Anthropic<br/>Claude"]
+        ctgov["ClinicalTrials.gov<br/>v2 API (Akamai)"]
+    end
+
+    pg[("PostgreSQL 16<br/>+ pgvector")]
+
+    client -- "JSON-RPC / stdio" --> server
+
+    st -- "embed query" --> voyage
+    st -- "cosine KNN" --> pg
+    gtd -- "curl_cffi<br/>browser-impersonated" --> ctgov
+    se -- "read criteria" --> pg
+    se -- "summarize" --> anthropic
+
+    ingest["scripts/ingest_trials.py"] -- "paginated fetch" --> ctgov
+    ingest -- "batched embed" --> voyage
+    ingest -- "upsert ON CONFLICT" --> pg
+```
+
+**Flow:** an MCP client drives the FastMCP server over stdio. `search_trials`
+is local-only (Voyage embeds the query, pgvector ranks by cosine distance).
+`get_trial_details` fetches live through the Akamai-safe `curl_cffi` client.
+`summarize_eligibility` reads criteria from Postgres and has Claude rewrite
+them. The ingest script populates pgvector ahead of time (one Voyage call per
+batch). Tools never raise — every failure returns `TextContent`.
+
+---
+
 ## Prerequisites
 
 - Python 3.11+
