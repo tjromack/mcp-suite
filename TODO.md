@@ -83,8 +83,8 @@ the forward roadmap for portfolio polish.
 - [x] **`v0.1.0` tag + GitHub release** with release notes (tools, stack, dataset, known limitations).
 
 ### Tier 2 — solid depth (moderate effort)
-- [ ] **Batch embedding in ingest** — one Voyage call per `--batch-size` group instead of per-trial (perf + cost; matters now at 562 rows). Add `embed_texts()` to `embeddings.py`, keep `embed_text()` as the single-text path.
-- [ ] **Broaden test coverage** — add tests for `ctgov.py` (mock `curl_cffi`), `embeddings.py` (retry/truncation/empty-guard), `config.py`. Currently only the 3 tools are unit-tested.
+- [x] **Batch embedding in ingest** — `embed_texts()` added; ingest makes one Voyage call per `--batch-size` group (~45× fewer requests at default size). Validated live (50 trials → 1 Voyage call, `embedded=50 skipped=0`). PR #1, commit `8e5cedc`.
+- [x] **Broaden test coverage** — `test_embeddings.py`, `test_ctgov.py`, `test_config.py` added (mocked/hermetic); suite 17 → 39. PR #1.
 - [ ] **Static typing in CI** — `mypy` or `pyright` gate.
 - [ ] **Architecture diagram** in README (client → FastMCP → tools → pgvector / CT.gov / Voyage / Claude).
 
