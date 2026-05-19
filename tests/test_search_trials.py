@@ -27,6 +27,7 @@ async def test_returns_ranked_results(mock_pool, mock_conn, _patch_embed):
             "phase": "PHASE2",
             "conditions": ["Breast Cancer"],
             "similarity": 0.9123,
+            "score": 0.0312,
         }
     ]
 
@@ -36,10 +37,16 @@ async def test_returns_ranked_results(mock_pool, mock_conn, _patch_embed):
     assert "NCT00000001" in text
     assert "A Cancer Trial" in text
     assert "similarity=0.912" in text
+    assert "score=0.0312 (hybrid)" in text
     assert "Breast Cancer" in text
     _patch_embed.assert_awaited_once()
     # input_type="query" must be passed (Voyage tunes vectors per type).
     assert _patch_embed.await_args.kwargs.get("input_type") == "query"
+    # Hybrid wiring: the raw query text is bound for websearch_to_tsquery,
+    # and the RRF k constant is passed (5 positional SQL args total).
+    call_args = mock_conn.fetch.await_args.args
+    assert "breast cancer" in call_args  # $4 query text for FTS
+    assert call_args[-1] == 60  # $5 RRF k
 
 
 async def test_empty_query_short_circuits(mock_pool, _patch_embed):
