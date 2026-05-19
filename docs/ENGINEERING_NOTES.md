@@ -23,6 +23,33 @@ Each note follows the same five-field shape:
 
 ## Notes
 
+### Containerizing a stdio server — scoped honestly, not oversold
+
+- **When**: 2026-05-19 (Phase 4 — Tier 3)
+- **What happened**: The roadmap said "containerize the MCP server." The naive
+  delivery is a Dockerfile + an always-on service. But this is a *stdio*
+  server: Claude Desktop spawns it via `uv run` on the host and talks over
+  stdin/stdout — a long-running server container has nothing to connect to it
+  and would just sit idle (the same "stdio server looks hung" lesson from the
+  Claude Desktop integration). So the `mcp` Compose service was put behind a
+  `server` **profile** (the default `docker compose up -d` still starts only
+  Postgres), the image's real value was scoped to "reproducible env for ingest
+  + a CI job that proves it builds," and the README says plainly that this
+  does **not** make Claude Desktop run in a container. Build also surfaced a
+  concrete gotcha: hatchling fails (`Readme file does not exist`) unless
+  `README.md` is COPYed in, because pyproject's `readme =` references it.
+- **What it demonstrates**: Delivering the *intent* of a task rather than its
+  literal phrasing — recognizing that an always-on container is wrong for a
+  stdio process, and documenting the honest scope instead of implying a
+  capability the artifact doesn't have. The profile gate and the
+  build-only CI job are the useful 80%; overselling would have been the
+  misleading 20%.
+- **Where to look**: [`Dockerfile`](../Dockerfile) (README COPY note),
+  [`docker-compose.yml`](../docker-compose.yml) (`mcp` service, `profiles:
+  ["server"]`, in-network `DATABASE_URL`),
+  [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (`docker-build`
+  job), README "Running in Docker"; branch `feat/containerize-server`.
+
 ### Mocked tests passed; live validation caught an asyncpg date-binding bug
 
 - **When**: 2026-05-19 (Phase 4 — Tier 3, search filters)

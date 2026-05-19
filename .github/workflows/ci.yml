@@ -35,3 +35,11 @@ jobs:
       - name: Tests
         # Suite is fully mocked — no Postgres, no network, no API keys needed.
         run: uv run pytest -q
+
+  docker-build:
+    # Verify the runtime image builds (no push) so the Dockerfile can't rot.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t clinical-trials-mcp:ci .

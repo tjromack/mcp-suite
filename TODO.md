@@ -89,9 +89,9 @@ the forward roadmap for portfolio polish.
 - [x] **Architecture diagram** in README — native-rendering Mermaid flowchart (client → FastMCP → tools → pgvector / CT.gov / Voyage / Claude). PR #3, commit `3d87902`.
 - [x] **demo.gif size** — considered (ffmpeg two-pass → 3.8 MB at 900px/8fps), **decided to keep the original 8.6 MB**: GitHub renders it inline fine and full fidelity was preferred over load speed for the portfolio's hero visual. Deliberate trade-off, not an oversight.
 
-### Tier 3 — feature depth (scope-dependent, optional)
-- [ ] **Hybrid search** — combine pgvector cosine with Postgres full-text (`tsvector`) for better recall on rare terms; optional re-rank.
-- [ ] **Response cache** for `get_trial_details` (TTL) — avoids repeat live API hits on the same NCT ID.
-- [ ] **More tools** — `find_similar_trials(nct_id)`, structured filters (phase/condition/date), pagination for `search_trials`.
-- [ ] **Containerize the MCP server** itself (not just Postgres) for one-command bring-up.
+### Tier 3 — feature depth ✅ DONE
+- [x] **Hybrid search** — pgvector cosine + Postgres FTS fused via Reciprocal Rank Fusion (generated `tsvector` column, no ingest change). PR #5, commit `dc60b82`.
+- [x] **Response cache** for `get_trial_details` — process-local TTL, negative results not cached. PR #4, commit `c8b30ac`.
+- [x] **More tools** — `find_similar_trials` (PR #6 `fe4fb6e`); `search_trials` phase/condition/date filters + pagination (PR #7 `5046e88`).
+- [x] **Containerize the MCP server** — Dockerfile + `mcp` Compose service behind a `server` profile + `docker-build` CI job; scoped honestly (stdio server, reproducible-env value). PR #8.
 - [ ] **Larger / themed dataset** — multi-`--query` ingest across disease areas; document corpus composition.

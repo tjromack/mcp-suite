@@ -17,5 +17,27 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Reproducible env for the MCP server / ingest. Behind the "server" profile
+  # so `docker compose up -d` brings up ONLY the DB (the normal dev flow) —
+  # an idle stdio server container would just sit there. Use:
+  #   docker compose --profile server build
+  #   docker compose run --rm mcp uv run python scripts/ingest_trials.py --max 50
+  mcp:
+    build:
+      context: .
+    image: clinical-trials-mcp:local
+    profiles: ["server"]
+    depends_on:
+      db:
+        condition: service_healthy
+    # .env is optional so the DB-only flow never breaks if it's absent;
+    # the server/ingest obviously still need the keys when actually run.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside the compose network the DB host is `db`, not localhost.
+      DATABASE_URL: postgresql://ctmcp:ctmcp_password@db:5432/clinical_trials
+
 volumes:
   pgdata:
