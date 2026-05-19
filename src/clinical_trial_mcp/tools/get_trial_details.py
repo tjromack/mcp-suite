@@ -11,11 +11,17 @@ import re
 
 from mcp.types import TextContent
 
+from clinical_trial_mcp.cache import TTLCache
+from clinical_trial_mcp.config import settings
 from clinical_trial_mcp.ctgov import fetch_study
 
 logger = logging.getLogger("clinical_trial_mcp.get_trial_details")
 
 _NCT_RE = re.compile(r"^NCT\d{8}$")
+
+# Process-local cache of successful fetches, keyed by normalized NCT ID.
+# 404s/errors are NOT cached (a trial may appear later). Exposed for tests.
+_CACHE = TTLCache(settings.ctgov_cache_ttl_seconds)
 
 
 def _safe(obj: dict | None, *path: str):
@@ -78,9 +84,14 @@ async def get_trial_details(nct_id: str) -> list[TextContent]:
                 )
             ]
 
-        study = await fetch_study(nct_id)
+        study = _CACHE.get(nct_id)
         if study is None:
-            return [TextContent(type="text", text=f"No trial found with NCT ID {nct_id}.")]
+            study = await fetch_study(nct_id)
+            if study is None:
+                return [TextContent(type="text", text=f"No trial found with NCT ID {nct_id}.")]
+            _CACHE.set(nct_id, study)
+        else:
+            logger.info("tool=get_trial_details cache_hit nct_id=%r", nct_id)
 
         return [TextContent(type="text", text=_format_study(study))]
     except Exception as exc:  # noqa: BLE001 — tool must not raise out

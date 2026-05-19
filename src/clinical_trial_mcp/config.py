@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # or better, point ctgov_ca_bundle at your proxy's root CA PEM.
     ctgov_ssl_verify: bool = True
     ctgov_ca_bundle: str | None = None
+    # In-memory TTL (seconds) for get_trial_details live fetches. Trial records
+    # change rarely; this avoids re-hitting the Akamai-fronted API for repeat
+    # lookups of the same NCT ID within a session. 0 disables caching.
+    ctgov_cache_ttl_seconds: int = 3600
 
 
 settings = Settings()
