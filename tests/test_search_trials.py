@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -42,11 +43,49 @@ async def test_returns_ranked_results(mock_pool, mock_conn, _patch_embed):
     _patch_embed.assert_awaited_once()
     # input_type="query" must be passed (Voyage tunes vectors per type).
     assert _patch_embed.await_args.kwargs.get("input_type") == "query"
-    # Hybrid wiring: the raw query text is bound for websearch_to_tsquery,
-    # and the RRF k constant is passed (5 positional SQL args total).
-    call_args = mock_conn.fetch.await_args.args
-    assert "breast cancer" in call_args  # $4 query text for FTS
-    assert call_args[-1] == 60  # $5 RRF k
+    # Hybrid wiring + filter/pagination defaults. Positional bind order:
+    # SQL, vec, status, top_k, query, RRF_k, phase, condition, min_date, offset
+    args = mock_conn.fetch.await_args.args
+    assert "breast cancer" in args  # $4 query text for FTS
+    assert 60 in args  # $5 RRF k constant
+    assert args[-1] == 0  # $9 default offset
+    assert args[2] is None and args[6] is None  # status/phase default None
+
+
+async def test_filters_and_pagination_are_bound(mock_pool, mock_conn, _patch_embed):
+    mock_conn.fetch.return_value = []
+
+    await search_trials(
+        mock_pool,
+        "cancer",
+        top_k=5,
+        status_filter="RECRUITING",
+        phase="PHASE2",
+        condition="breast",
+        min_start_date="2023-01-01",
+        offset=10,
+    )
+
+    args = mock_conn.fetch.await_args.args
+    # SQL, vec, status, top_k, query, RRF, phase, condition, min_date, offset
+    assert args[2] == "RECRUITING"
+    assert args[3] == 5
+    assert args[6] == "PHASE2"
+    assert args[7] == "breast"
+    assert args[8] == date(2023, 1, 1)  # parsed to a real date for asyncpg
+    assert args[9] == 10
+
+
+async def test_invalid_min_start_date_returns_clean_error(mock_pool, mock_conn, _patch_embed):
+    result = await search_trials(mock_pool, "cancer", min_start_date="not-a-date")
+    assert "not a valid ISO date" in result[0].text
+    mock_conn.fetch.assert_not_awaited()  # rejected before the query
+
+
+async def test_offset_clamped_non_negative(mock_pool, mock_conn, _patch_embed):
+    mock_conn.fetch.return_value = []
+    await search_trials(mock_pool, "cancer", offset=-5)
+    assert mock_conn.fetch.await_args.args[-1] == 0
 
 
 async def test_empty_query_short_circuits(mock_pool, _patch_embed):
