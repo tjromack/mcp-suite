@@ -53,8 +53,11 @@ async def fetch_studies_page(
     response = await session.get(
         API_BASE_URL,
         params=params,
-        impersonate=settings.ctgov_impersonate,
-        verify=verify_setting(),
+        # curl_cffi's stub types impersonate as a closed Literal and verify as
+        # bool|None; both are runtime-configurable here and libcurl accepts a
+        # CA-bundle path str for verify, so the stub is narrower than reality.
+        impersonate=settings.ctgov_impersonate,  # type: ignore[arg-type]
+        verify=verify_setting(),  # type: ignore[arg-type]
         timeout=HTTP_TIMEOUT_SECONDS,
     )
     response.raise_for_status()

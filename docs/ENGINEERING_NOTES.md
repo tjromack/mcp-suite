@@ -23,6 +23,36 @@ Each note follows the same five-field shape:
 
 ## Notes
 
+### Adding a mypy gate paid for itself on the first run
+
+- **When**: 2026-05-19 (Phase 4 — Tier 2)
+- **What happened**: Added a `mypy` CI gate (pragmatic config:
+  `ignore_missing_imports` for the stub-less third-party libs,
+  `check_untyped_defs`, `warn_unused_ignores`). The first run surfaced 14
+  errors across 3 files, each handled on its merits rather than blanket-
+  silenced: a genuine improvement (`interventions` built as `list[str]` via
+  `str(i["name"])` instead of `list[Any | None]`); a correctness-adjacent
+  narrowing (`isinstance(block, TextBlock)` instead of a `getattr`
+  type-string check for Anthropic content blocks — which also forced the test
+  fixture to use a *real* `TextBlock`, making the test faithful to the SDK
+  contract); and two honest, commented `# type: ignore[arg-type]` for a
+  curl_cffi stub that types `impersonate`/`verify` more narrowly than the
+  runtime accepts. `warn_unused_ignores` then caught that the same ignores
+  were unnecessary at the second call site and they were removed.
+- **What it demonstrates**: A type gate earns its place immediately — it
+  found a latent typing weakness and a test that wasn't exercising the real
+  code path. Also the discipline of triaging each finding (fix vs. narrow vs.
+  documented-ignore) instead of reaching for a blanket suppression, and
+  letting `warn_unused_ignores` keep even the suppressions honest.
+- **Where to look**: [`pyproject.toml`](../pyproject.toml) `[tool.mypy]`;
+  [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) "Type check"
+  step; the fixes in
+  [`src/clinical_trial_mcp/tools/get_trial_details.py`](../src/clinical_trial_mcp/tools/get_trial_details.py),
+  [`src/clinical_trial_mcp/tools/summarize_eligibility.py`](../src/clinical_trial_mcp/tools/summarize_eligibility.py),
+  [`src/clinical_trial_mcp/ctgov.py`](../src/clinical_trial_mcp/ctgov.py),
+  and the real-`TextBlock` fixture in
+  [`tests/conftest.py`](../tests/conftest.py); branch `feat/ci-mypy`.
+
 ### Batched ingest embedding — one Voyage call per batch, not per trial
 
 - **When**: 2026-05-19 (Phase 4 — Tier 2)
