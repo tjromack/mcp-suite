@@ -79,7 +79,7 @@ the forward roadmap for portfolio polish.
 
 ### Tier 1 — do before public (high signal, low effort) ✅ DONE
 - [x] **GitHub Actions CI** — `.github/workflows/ci.yml` runs `ruff check`, `ruff format --check`, `pytest` on push/PR; green; badge in README.
-- [x] **`docs/DESIGN.md`** — architecture + trade-offs + build war-stories (Akamai/curl_cffi, TLS proxy/truststore, Voyage pairing, FastMCP core/wrapper, honest ivfflat finding).
+- [x] **Portfolio doc layer** — `docs/PROJECT_QA.md` (dual-register explainer + interview pitches) and `docs/ENGINEERING_NOTES.md` (five-field build-moment log); superseded the interim `DESIGN.md`, content folded into both. Matches the nba-parquet doc pattern.
 - [x] **`v0.1.0` tag + GitHub release** with release notes (tools, stack, dataset, known limitations).
 
 ### Tier 2 — solid depth (moderate effort)

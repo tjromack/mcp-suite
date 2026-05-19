@@ -6,7 +6,7 @@
 
 **Status:** v0.1 — all 3 tools working, 562 trials ingested, validated end-to-end in Claude Desktop. 17 tests passing, `ruff`-clean. See [TODO.md](TODO.md) for the roadmap.
 
-📐 **[docs/DESIGN.md](docs/DESIGN.md)** — architecture, design decisions, and the real constraints hit during the build (Akamai bot protection, TLS-intercepting proxy, pgvector planner behavior). Worth reading.
+📐 **[docs/PROJECT_QA.md](docs/PROJECT_QA.md)** — what it is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
 ---
 
