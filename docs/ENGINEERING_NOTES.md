@@ -23,6 +23,35 @@ Each note follows the same five-field shape:
 
 ## Notes
 
+### Batched ingest embedding — one Voyage call per batch, not per trial
+
+- **When**: 2026-05-19 (Phase 4 — Tier 2)
+- **What happened**: Ingest embedded one trial per Voyage request — 562 API
+  round-trips for the current corpus. Added `embed_texts()` to the embeddings
+  wrapper (Voyage accepts many texts per call) and made `embed_text()` a thin
+  delegate so the retry/truncation loop stays single-sourced. `ingest_trials`
+  now collects a batch's embeddable texts, makes **one** call per
+  `--batch-size` group, and zips vectors back to rows in order. At the default
+  batch size of 50 that's ~12 calls instead of 562 — a ~45× reduction in
+  request count (and proportionally less rate-limit/backoff exposure). The
+  failure unit changed from per-row to per-batch; a transient failure now
+  skips the batch with accurate `(embedded, skipped)` accounting rather than
+  retrying 50 rows individually.
+- **What it demonstrates**: Spotting an N-calls-where-1-suffices cost/perf
+  issue and fixing it behind the existing single-entry abstraction, so callers
+  and the public `embed_text` contract are unchanged. Also a deliberate
+  trade-off call: coarser (per-batch) failure granularity is acceptable
+  because the dominant failure modes are whole-account/rate-limit, not
+  per-text, and the wasted-call reduction outweighs it.
+- **Where to look**:
+  [`src/clinical_trial_mcp/embeddings.py`](../src/clinical_trial_mcp/embeddings.py)
+  (`embed_texts`, and `embed_text` delegating to it);
+  [`scripts/ingest_trials.py`](../scripts/ingest_trials.py)
+  (`embed_and_upsert_batch`, now one call + `zip(embeddable, vectors)`);
+  [`tests/test_embeddings.py`](../tests/test_embeddings.py) (order, truncation,
+  retry-then-succeed, retry-exhausted, non-retryable, empty-guard); branch
+  `feat/batch-embedding`.
+
 ### Documented an "unused" pgvector index honestly instead of faking it
 
 - **When**: 2026-05-18 (Phase 3 — performance pass)

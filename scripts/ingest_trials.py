@@ -22,7 +22,7 @@ from curl_cffi.requests import AsyncSession
 from clinical_trial_mcp.config import settings
 from clinical_trial_mcp.ctgov import fetch_studies_page
 from clinical_trial_mcp.db import connection as db_connection
-from clinical_trial_mcp.embeddings import embed_text, to_vector_literal
+from clinical_trial_mcp.embeddings import embed_texts, to_vector_literal
 
 PAGE_SIZE = 100  # ClinicalTrials.gov caps pageSize at 1000; 100 is a polite default.
 
@@ -187,10 +187,16 @@ async def embed_and_upsert_batch(
     pool: Any,
     rows: list[dict[str, Any]],
 ) -> tuple[int, int]:
-    """Embed each row's text and upsert it. Returns (embedded, skipped)."""
-    embedded = 0
+    """Embed a batch in ONE Voyage call, then upsert. Returns (embedded, skipped).
+
+    Rows with no embeddable text are skipped before the API call. If the
+    (single) batch embedding call fails after retries, the whole batch is
+    skipped — far fewer wasted calls than the old per-row approach, same
+    net (embedded, skipped) accounting.
+    """
     skipped = 0
-    records: list[tuple] = []
+    embeddable: list[dict[str, Any]] = []
+    texts: list[str] = []
 
     for row in rows:
         text = build_embedding_input(row)
@@ -198,38 +204,47 @@ async def embed_and_upsert_batch(
             skipped += 1
             logger.debug("Skipping %s: empty summary and eligibility", row["nct_id"])
             continue
-        try:
-            vector = await embed_text(text)
-        except Exception as exc:
-            skipped += 1
-            logger.warning("Embedding failed for %s: %s", row["nct_id"], exc)
-            continue
+        embeddable.append(row)
+        texts.append(text)
 
-        records.append(
-            (
-                row["nct_id"],
-                row["brief_title"],
-                row["official_title"],
-                row["status"],
-                row["phase"],
-                row["conditions"],
-                row["interventions"],
-                row["brief_summary"],
-                row["eligibility_criteria"],
-                row["start_date"],
-                row["last_updated"],
-                json.dumps(row["source_json"]),
-                to_vector_literal(vector),
-            )
+    if not texts:
+        return 0, skipped
+
+    try:
+        vectors = await embed_texts(texts)
+    except Exception as exc:
+        logger.warning(
+            "Batch embedding failed for %d trials (%s…): %s",
+            len(texts),
+            embeddable[0]["nct_id"],
+            exc,
         )
-        embedded += 1
+        return 0, skipped + len(texts)
 
-    if records:
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.executemany(UPSERT_SQL, records)
+    records = [
+        (
+            row["nct_id"],
+            row["brief_title"],
+            row["official_title"],
+            row["status"],
+            row["phase"],
+            row["conditions"],
+            row["interventions"],
+            row["brief_summary"],
+            row["eligibility_criteria"],
+            row["start_date"],
+            row["last_updated"],
+            json.dumps(row["source_json"]),
+            to_vector_literal(vector),
+        )
+        for row, vector in zip(embeddable, vectors)
+    ]
 
-    return embedded, skipped
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.executemany(UPSERT_SQL, records)
+
+    return len(records), skipped
 
 
 # ---------------------------------------------------------------------------

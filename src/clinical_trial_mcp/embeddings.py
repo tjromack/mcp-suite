@@ -1,8 +1,9 @@
 """Voyage AI embedding wrapper with retry, truncation, and an empty-input guard.
 
-All tool/script code should call ``embed_text()`` rather than constructing a
-``voyageai.AsyncClient`` directly — this keeps retry policy, model selection,
-and truncation rules in one place.
+All tool/script code should call ``embed_text()`` (single) or ``embed_texts()``
+(batch) rather than constructing a ``voyageai.AsyncClient`` directly — this
+keeps retry policy, model selection, and truncation rules in one place.
+``embed_text`` delegates to ``embed_texts`` so the retry loop is single-sourced.
 
 Anthropic doesn't offer a text embeddings API, so we use Voyage (Anthropic's
 officially recommended embedding provider). Models like ``voyage-3`` are
@@ -59,24 +60,30 @@ def _get_client() -> voyageai.AsyncClient:
     return _client
 
 
-async def embed_text(
-    text: str,
+async def embed_texts(
+    texts: list[str],
     *,
     model: str | None = None,
     input_type: InputType = "document",
-) -> list[float]:
-    """Embed a single string and return its vector as a plain list[float].
+) -> list[list[float]]:
+    """Embed many strings in a single Voyage request; preserves input order.
 
-    ``input_type`` should be ``"document"`` for stored content and ``"query"``
-    for live user queries — Voyage tunes embeddings differently for each.
+    One API call per batch instead of one per text — the perf/cost win for
+    ingest. ``input_type`` should be ``"document"`` for stored content and
+    ``"query"`` for live user queries (Voyage tunes embeddings per type).
 
-    Raises ``ValueError`` on empty input. Retries up to 3 times (1s, 2s, 4s)
-    on transient Voyage errors (rate limit, timeout, 503, connection).
+    Raises ``ValueError`` if the batch is empty or any element is
+    empty/whitespace (callers must filter first — the contract mirrors
+    ``embed_text``). Each text is truncated to the char cap. The whole batch
+    is retried up to 3 times (1s, 2s, 4s) on transient Voyage errors.
     """
-    if not text or not text.strip():
-        raise ValueError("Cannot embed empty text")
+    if not texts:
+        raise ValueError("Cannot embed an empty batch")
+    for i, t in enumerate(texts):
+        if not t or not t.strip():
+            raise ValueError(f"Cannot embed empty text (batch index {i})")
 
-    truncated = text[:_MAX_INPUT_CHARS]
+    truncated = [t[:_MAX_INPUT_CHARS] for t in texts]
     chosen_model = model or settings.embedding_model
     client = _get_client()
 
@@ -87,11 +94,11 @@ async def embed_text(
             await asyncio.sleep(delay)
         try:
             result = await client.embed(
-                texts=[truncated],
+                texts=truncated,
                 model=chosen_model,
                 input_type=input_type,
             )
-            return list(result.embeddings[0])
+            return [list(v) for v in result.embeddings]
         except _RETRYABLE_ERRORS as exc:
             last_error = exc
             if attempt == len(delays):
@@ -99,3 +106,25 @@ async def embed_text(
 
     assert last_error is not None
     raise last_error
+
+
+async def embed_text(
+    text: str,
+    *,
+    model: str | None = None,
+    input_type: InputType = "document",
+) -> list[float]:
+    """Embed a single string and return its vector as a plain list[float].
+
+    Thin wrapper over :func:`embed_texts` so retry/truncation live in one
+    place. ``input_type`` should be ``"document"`` for stored content and
+    ``"query"`` for live user queries — Voyage tunes embeddings per type.
+
+    Raises ``ValueError`` on empty input. Retries up to 3 times (1s, 2s, 4s)
+    on transient Voyage errors (rate limit, timeout, 503, connection).
+    """
+    if not text or not text.strip():
+        raise ValueError("Cannot embed empty text")
+
+    vectors = await embed_texts([text], model=model, input_type=input_type)
+    return vectors[0]
