@@ -6,7 +6,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from clinical_trial_mcp.tools.get_trial_details import get_trial_details
+from clinical_trial_mcp.tools.get_trial_details import _CACHE, get_trial_details
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Isolate the process-local response cache between tests."""
+    _CACHE.clear()
+    yield
+    _CACHE.clear()
+
 
 _FAKE_STUDY = {
     "protocolSection": {
@@ -76,3 +85,36 @@ async def test_network_error_returned_not_raised():
     ):
         result = await get_trial_details("NCT04280705")
     assert "Error running get_trial_details" in result[0].text
+
+
+# --- response cache --------------------------------------------------------
+
+
+async def test_cache_hit_skips_second_fetch(_patch_fetch):
+    first = await get_trial_details("NCT04280705")
+    second = await get_trial_details("NCT04280705")
+
+    assert first[0].text == second[0].text
+    _patch_fetch.assert_awaited_once()  # second call served from cache
+
+
+async def test_404_is_not_cached():
+    fetch = AsyncMock(side_effect=[None, _FAKE_STUDY])
+    with patch("clinical_trial_mcp.tools.get_trial_details.fetch_study", new=fetch):
+        miss = await get_trial_details("NCT04280705")
+        hit = await get_trial_details("NCT04280705")
+
+    assert "No trial found" in miss[0].text
+    assert "Adaptive COVID-19 Treatment Trial" in hit[0].text  # re-fetched, not cached None
+    assert fetch.await_count == 2
+
+
+async def test_error_is_not_cached():
+    fetch = AsyncMock(side_effect=[RuntimeError("transient"), _FAKE_STUDY])
+    with patch("clinical_trial_mcp.tools.get_trial_details.fetch_study", new=fetch):
+        err = await get_trial_details("NCT04280705")
+        ok = await get_trial_details("NCT04280705")
+
+    assert "Error running get_trial_details" in err[0].text
+    assert "Adaptive COVID-19 Treatment Trial" in ok[0].text
+    assert fetch.await_count == 2

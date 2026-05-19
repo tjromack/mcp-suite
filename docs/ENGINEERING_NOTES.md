@@ -23,6 +23,32 @@ Each note follows the same five-field shape:
 
 ## Notes
 
+### TTL cache for live trial lookups — with a deliberate negative-result choice
+
+- **When**: 2026-05-19 (Phase 4 — Tier 3)
+- **What happened**: `get_trial_details` hit the Akamai-fronted API on every
+  call, including repeat lookups of the same NCT ID. Added a tiny process-
+  local `TTLCache` (configurable `CTGOV_CACHE_TTL_SECONDS`, default 1h) and
+  cached results around `fetch_study`. Two deliberate design choices: (1) the
+  cache takes an **injectable `clock`** so expiry is unit-tested with a
+  `FakeClock` instead of `sleep`; (2) **404s and errors are not cached** —
+  only successful fetches — so a trial that appears later, or a transient
+  failure, isn't pinned as "missing" for an hour. The global cache also forced
+  a test-isolation `autouse` fixture so cached state can't bleed across tests.
+- **What it demonstrates**: Caching with the boring-but-correct details
+  handled — testable time, an explicit negative-caching policy (the choice
+  most naive caches get wrong), and recognizing that introducing process-
+  global state creates a test-isolation obligation, not just a feature.
+- **Where to look**:
+  [`src/clinical_trial_mcp/cache.py`](../src/clinical_trial_mcp/cache.py)
+  (`TTLCache`, injectable clock, `enabled` gate);
+  [`src/clinical_trial_mcp/tools/get_trial_details.py`](../src/clinical_trial_mcp/tools/get_trial_details.py)
+  (`_CACHE`, cache-around-fetch, no negative caching);
+  [`tests/test_cache.py`](../tests/test_cache.py) and the cache tests +
+  `_clear_cache` fixture in
+  [`tests/test_get_trial_details.py`](../tests/test_get_trial_details.py);
+  branch `feat/trial-details-cache`.
+
 ### Adding a mypy gate paid for itself on the first run
 
 - **When**: 2026-05-19 (Phase 4 — Tier 2)
