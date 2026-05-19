@@ -1,11 +1,12 @@
 # CLAUDE.md — Clinical-Trial Search MCP Server
 
 ## Project Purpose
-A Python MCP (Model Context Protocol) server that wraps the ClinicalTrials.gov public REST API and adds pgvector-powered semantic search over trial summaries. The server exposes three tools consumable by Claude Desktop or any MCP-compatible client:
+A Python MCP (Model Context Protocol) server that wraps the ClinicalTrials.gov public REST API and adds pgvector-powered semantic search over trial summaries. The server exposes four tools consumable by Claude Desktop or any MCP-compatible client:
 
 1. **`search_trials`** — hybrid search: fuses pgvector cosine ranking with Postgres full-text ranking via Reciprocal Rank Fusion over stored trial summaries
-2. **`get_trial_details`** — fetches full structured JSON for a specific trial from ClinicalTrials.gov
-3. **`summarize_eligibility`** — calls Claude (Anthropic API) to produce plain-language eligibility summaries from raw criteria text
+2. **`find_similar_trials`** — "more like this": vector KNN from an ingested trial's stored embedding (no query embedding call)
+3. **`get_trial_details`** — fetches full structured JSON for a specific trial from ClinicalTrials.gov
+4. **`summarize_eligibility`** — calls Claude (Anthropic API) to produce plain-language eligibility summaries from raw criteria text
 
 This is a portfolio project demonstrating: MCP server authoring, pgvector semantic search against real NLP-heavy data, and LLM-assisted text processing.
 

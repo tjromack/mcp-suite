@@ -18,6 +18,9 @@ from pydantic import Field
 
 from clinical_trial_mcp.config import settings
 from clinical_trial_mcp.db.connection import close_pool, get_pool, init_pool
+from clinical_trial_mcp.tools.find_similar_trials import (
+    find_similar_trials as _find_similar_trials,
+)
 from clinical_trial_mcp.tools.get_trial_details import get_trial_details as _get_trial_details
 from clinical_trial_mcp.tools.search_trials import search_trials as _search_trials
 from clinical_trial_mcp.tools.summarize_eligibility import (
@@ -80,6 +83,28 @@ async def search_trials(
         status_filter,
     )
     return await _search_trials(get_pool(), query, top_k, status_filter)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Find similar trials",
+        readOnlyHint=True,  # only reads pgvector
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,  # local DB only; reuses stored embedding
+    )
+)
+async def find_similar_trials(
+    nct_id: Annotated[str, Field(description="Reference trial NCT ID, must be ingested locally.")],
+    top_k: Annotated[int, Field(description="Max results (1-50).", ge=1, le=50)] = 10,
+) -> list[TextContent]:
+    """Find trials most similar to a given ingested trial (vector KNN).
+
+    Reuses the reference trial's stored embedding — no query embedding call.
+    Local only — does not contact ClinicalTrials.gov.
+    """
+    logger.info("tool=find_similar_trials nct_id=%r top_k=%s", nct_id, top_k)
+    return await _find_similar_trials(get_pool(), nct_id, top_k)
 
 
 @mcp.tool(

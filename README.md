@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/tjromack/clinical-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/clinical-mcp/actions/workflows/ci.yml)
 
-**Status:** v0.1 — all 3 tools working, 562 trials ingested, validated end-to-end in Claude Desktop. 17 tests passing, `ruff`-clean. See [TODO.md](TODO.md) for the roadmap.
+**Status:** v0.1 — 4 tools working (hybrid search, similar-trials, live details, eligibility summary), 600+ trials ingested, validated end-to-end in Claude Desktop. 58 tests passing, `ruff` + `mypy` clean, CI green. See [TODO.md](TODO.md) for the roadmap.
 
 📐 **[docs/PROJECT_QA.md](docs/PROJECT_QA.md)** — what it is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
@@ -12,11 +12,12 @@
 
 ## What It Is
 
-A Python [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives Claude Desktop (or any MCP client) three powerful tools over the ClinicalTrials.gov public dataset:
+A Python [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives Claude Desktop (or any MCP client) four tools over the ClinicalTrials.gov public dataset:
 
 | Tool | What it does |
 |---|---|
-| `search_trials` | Semantic similarity search over 500+ trial summaries stored in **pgvector** |
+| `search_trials` | **Hybrid** search (pgvector cosine + Postgres full-text, fused via Reciprocal Rank Fusion) over 600+ trial summaries |
+| `find_similar_trials` | "More like this" — vector KNN from an ingested trial's stored embedding |
 | `get_trial_details` | Fetches live structured JSON for any trial by NCT ID |
 | `summarize_eligibility` | Converts dense inclusion/exclusion criteria into plain English via Claude |
 
@@ -193,7 +194,7 @@ into your Claude Desktop config and edit the absolute path:
 `--directory` makes `uv` use this project's venv and resolve its `.env`.
 `UV_NATIVE_TLS=1` is needed if you're behind a TLS-inspecting proxy (harmless
 otherwise). Postgres must be running and `.env` filled in. Restart Claude
-Desktop — the three tools appear in the tool picker.
+Desktop — the four tools appear in the tool picker.
 
 ---
 
