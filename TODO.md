@@ -85,8 +85,9 @@ the forward roadmap for portfolio polish.
 ### Tier 2 — solid depth (moderate effort)
 - [x] **Batch embedding in ingest** — `embed_texts()` added; ingest makes one Voyage call per `--batch-size` group (~45× fewer requests at default size). Validated live (50 trials → 1 Voyage call, `embedded=50 skipped=0`). PR #1, commit `8e5cedc`.
 - [x] **Broaden test coverage** — `test_embeddings.py`, `test_ctgov.py`, `test_config.py` added (mocked/hermetic); suite 17 → 39. PR #1.
-- [ ] **Static typing in CI** — `mypy` or `pyright` gate.
-- [ ] **Architecture diagram** in README (client → FastMCP → tools → pgvector / CT.gov / Voyage / Claude).
+- [x] **Static typing in CI** — `mypy` gate added; first run caught & fixed 14 type issues. PR #2, commit `74e80ab`.
+- [x] **Architecture diagram** in README — native-rendering Mermaid flowchart (client → FastMCP → tools → pgvector / CT.gov / Voyage / Claude). PR #3, commit `3d87902`.
+- [x] **demo.gif size** — considered (ffmpeg two-pass → 3.8 MB at 900px/8fps), **decided to keep the original 8.6 MB**: GitHub renders it inline fine and full fidelity was preferred over load speed for the portfolio's hero visual. Deliberate trade-off, not an oversight.
 
 ### Tier 3 — feature depth (scope-dependent, optional)
 - [ ] **Hybrid search** — combine pgvector cosine with Postgres full-text (`tsvector`) for better recall on rare terms; optional re-rank.
