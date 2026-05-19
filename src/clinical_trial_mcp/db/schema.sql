@@ -24,3 +24,20 @@ CREATE TABLE IF NOT EXISTS trials (
 CREATE INDEX IF NOT EXISTS trials_embedding_idx
     ON trials USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100);
+
+-- Lexical half of hybrid search. A STORED GENERATED column means it
+-- auto-populates for existing rows on ALTER and stays in sync on write —
+-- no ingest change, no manual backfill. GIN index for fast @@ matching.
+ALTER TABLE trials
+    ADD COLUMN IF NOT EXISTS search_tsv tsvector
+    GENERATED ALWAYS AS (
+        to_tsvector(
+            'english',
+            coalesce(brief_title, '') || ' ' ||
+            coalesce(brief_summary, '') || ' ' ||
+            coalesce(eligibility_criteria, '')
+        )
+    ) STORED;
+
+CREATE INDEX IF NOT EXISTS trials_search_tsv_idx
+    ON trials USING gin (search_tsv);

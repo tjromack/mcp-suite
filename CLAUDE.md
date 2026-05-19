@@ -3,7 +3,7 @@
 ## Project Purpose
 A Python MCP (Model Context Protocol) server that wraps the ClinicalTrials.gov public REST API and adds pgvector-powered semantic search over trial summaries. The server exposes three tools consumable by Claude Desktop or any MCP-compatible client:
 
-1. **`search_trials`** — embeds a query and does cosine-similarity search over stored trial summaries in pgvector
+1. **`search_trials`** — hybrid search: fuses pgvector cosine ranking with Postgres full-text ranking via Reciprocal Rank Fusion over stored trial summaries
 2. **`get_trial_details`** — fetches full structured JSON for a specific trial from ClinicalTrials.gov
 3. **`summarize_eligibility`** — calls Claude (Anthropic API) to produce plain-language eligibility summaries from raw criteria text
 
@@ -50,7 +50,7 @@ clinical-trial-mcp/
 │       ├── ctgov.py           # shared curl_cffi ClinicalTrials.gov client (Akamai-safe)
 │       ├── tools/
 │       │   ├── __init__.py
-│       │   ├── search_trials.py       # pgvector cosine search (local only)
+│       │   ├── search_trials.py       # hybrid vector+FTS search via RRF (local only)
 │       │   ├── get_trial_details.py   # live ClinicalTrials.gov fetch via ctgov.py
 │       │   └── summarize_eligibility.py  # Claude eligibility summarization
 │       ├── db/
@@ -89,13 +89,21 @@ CREATE TABLE trials (
     start_date      DATE,
     last_updated    TIMESTAMP,
     source_json     JSONB,                     -- full raw API response
-    embedding       vector(1024)               -- voyage-3 on brief_summary + first 300 chars eligibility
+    embedding       vector(1024),              -- voyage-3 on brief_summary + first 300 chars eligibility
+    search_tsv      tsvector GENERATED ALWAYS AS (...) STORED  -- lexical half of hybrid search
 );
 
 CREATE INDEX trials_embedding_idx
     ON trials USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100);
+CREATE INDEX trials_search_tsv_idx ON trials USING gin (search_tsv);
 ```
+
+`search_tsv` is a STORED generated column over `brief_title + brief_summary +
+eligibility_criteria` — it auto-backfills on `ALTER` and stays in sync on
+write, so adding hybrid search needed no ingest change. `search_trials` fuses
+the cosine ranking and the `ts_rank` lexical ranking with Reciprocal Rank
+Fusion (see `tools/search_trials.py`).
 
 The `embedding` column is generated from `brief_summary` (and optionally first 500 chars of `eligibility_criteria` concatenated). This gives pgvector a real workload because eligibility text is dense, domain-specific, and hard to keyword-match.
 

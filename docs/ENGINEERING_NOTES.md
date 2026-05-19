@@ -23,6 +23,39 @@ Each note follows the same five-field shape:
 
 ## Notes
 
+### Hybrid search via a generated tsvector + Reciprocal Rank Fusion
+
+- **When**: 2026-05-19 (Phase 4 — Tier 3)
+- **What happened**: `search_trials` was pure vector cosine, which misses
+  exact-term recall (acronyms, drug names, NCT-adjacent jargon). Added a
+  lexical arm and fused the two. Two design choices carried the work: (1) the
+  `search_tsv` column is a **STORED `GENERATED ALWAYS AS` column** over
+  title+summary+eligibility — re-applying the idempotent `schema.sql`
+  auto-backfilled all 612 live rows and keeps the vector in sync on every
+  write, so hybrid search shipped with **zero ingest changes and no manual
+  backfill**; (2) ranking fusion uses **Reciprocal Rank Fusion**
+  (`Σ 1/(k+rank)`, k=60) in one parameterized CTE query, with the FTS arm
+  `LEFT JOIN`ed so a row with no lexical hit still ranks on its vector arm
+  alone — graceful degrade to pure vector when the query is gibberish or all
+  stopwords. Verified live: for "BRCA1 breast cancer mutations" the top hit
+  (RRF 0.0325) outranked a row with *higher* cosine similarity (0.477 vs
+  0.381) because its exact lexical match boosted it — proof the fusion
+  reorders, not just decorates.
+- **What it demonstrates**: Picking the database feature that removes work
+  (a generated column → no migration/backfill/ingest churn) instead of the
+  obvious-but-heavier path (new column + ingest write + backfill script), and
+  using a principled, score-scale-free fusion (RRF) rather than hand-tuned
+  weighted sums of incomparable vector-distance and ts_rank scales. The
+  LEFT-JOIN degrade path was a deliberate correctness choice, then confirmed
+  against real data rather than assumed.
+- **Where to look**:
+  [`src/clinical_trial_mcp/db/schema.sql`](../src/clinical_trial_mcp/db/schema.sql)
+  (generated `search_tsv` + GIN index);
+  [`src/clinical_trial_mcp/tools/search_trials.py`](../src/clinical_trial_mcp/tools/search_trials.py)
+  (`_SEARCH_SQL` CTEs `base`/`vec`/`fts`, RRF score, `_RRF_K`);
+  [`tests/test_search_trials.py`](../tests/test_search_trials.py) (hybrid
+  param wiring); branch `feat/hybrid-search`.
+
 ### TTL cache for live trial lookups — with a deliberate negative-result choice
 
 - **When**: 2026-05-19 (Phase 4 — Tier 3)
