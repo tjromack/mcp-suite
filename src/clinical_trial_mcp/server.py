@@ -1,4 +1,4 @@
-"""MCP server entry point. Registers the three tools and runs on stdio.
+"""MCP server entry point. Registers the four tools and runs on stdio.
 
 The DB pool is opened in the FastMCP lifespan (server startup) and closed on
 shutdown. Tool wrappers are thin: they pull the shared pool via get_pool() and
@@ -70,19 +70,47 @@ async def search_trials(
         str | None,
         Field(description="Optional exact status filter, e.g. RECRUITING, COMPLETED."),
     ] = None,
+    phase: Annotated[
+        str | None,
+        Field(description="Optional exact phase filter, e.g. PHASE2, PHASE3, NA."),
+    ] = None,
+    condition: Annotated[
+        str | None,
+        Field(description="Optional case-insensitive substring match on a condition."),
+    ] = None,
+    min_start_date: Annotated[
+        str | None,
+        Field(description="Optional ISO date (YYYY-MM-DD); keep trials starting on/after it."),
+    ] = None,
+    offset: Annotated[int, Field(description="Pagination offset (skip N results).", ge=0)] = 0,
 ) -> list[TextContent]:
-    """Semantic similarity search over locally stored clinical-trial summaries.
+    """Hybrid search over locally stored clinical-trial summaries.
 
-    Embeds the query and ranks trials by pgvector cosine similarity. Local
+    Fuses pgvector cosine + Postgres full-text via Reciprocal Rank Fusion;
+    supports status/phase/condition/start-date filters and pagination. Local
     only — does not contact ClinicalTrials.gov.
     """
     logger.info(
-        "tool=search_trials query=%r top_k=%s status_filter=%r",
+        "tool=search_trials query=%r top_k=%s offset=%s "
+        "status_filter=%r phase=%r condition=%r min_start_date=%r",
+        query,
+        top_k,
+        offset,
+        status_filter,
+        phase,
+        condition,
+        min_start_date,
+    )
+    return await _search_trials(
+        get_pool(),
         query,
         top_k,
         status_filter,
+        phase,
+        condition,
+        min_start_date,
+        offset,
     )
-    return await _search_trials(get_pool(), query, top_k, status_filter)
 
 
 @mcp.tool(

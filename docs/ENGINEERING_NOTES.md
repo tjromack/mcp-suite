@@ -23,6 +23,31 @@ Each note follows the same five-field shape:
 
 ## Notes
 
+### Mocked tests passed; live validation caught an asyncpg date-binding bug
+
+- **When**: 2026-05-19 (Phase 4 — Tier 3, search filters)
+- **What happened**: Added `min_start_date` filtering to `search_trials`,
+  passing the MCP string param straight into a `$8::date` bind. All mocked
+  unit tests passed (they assert the value is *bound*, not how asyncpg types
+  it). The mandatory live check against the 612-row DB failed immediately:
+  `DataError: invalid input for query argument $8: ... 'str' object has no
+  attribute 'toordinal'` — asyncpg infers the param type from `::date` and
+  wants a real `datetime.date`, not a string. Fixed by parsing the ISO string
+  to `date` in Python, which also turned a malformed date from a leaked DB
+  `DataError` into a clean `"not a valid ISO date"` tool message; added a
+  regression test for both the parsed bind and the bad-date path.
+- **What it demonstrates**: The recurring lesson that green mocked tests are
+  necessary but not sufficient — a type-binding mismatch only shows against a
+  real driver/DB, which is exactly why every DB-touching change here gets a
+  live validation pass before merge. Also: turning a driver-level error into a
+  user-readable tool error is part of the fix, not an afterthought.
+- **Where to look**:
+  [`src/clinical_trial_mcp/tools/search_trials.py`](../src/clinical_trial_mcp/tools/search_trials.py)
+  (`date.fromisoformat` parse + clean error; `$8::date` bind);
+  [`tests/test_search_trials.py`](../tests/test_search_trials.py)
+  (`test_invalid_min_start_date_returns_clean_error`, parsed-date assertion);
+  branch `feat/search-filters-pagination`.
+
 ### Hybrid search via a generated tsvector + Reciprocal Rank Fusion
 
 - **When**: 2026-05-19 (Phase 4 — Tier 3)
