@@ -209,9 +209,36 @@ Desktop — the four tools appear in the tool picker.
 ## Running Tests
 
 ```bash
-uv run pytest tests/ -v          # 17 tests, fully mocked (no DB/network)
-uv run ruff check . && uv run ruff format --check .
+uv run pytest tests/ -v          # 61 tests, fully mocked (no DB/network/keys)
+uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
+
+---
+
+## Running in Docker
+
+There's a `Dockerfile` and an `mcp` Compose service for a reproducible
+environment. **Honest scope:** this MCP server speaks **stdio** and is normally
+spawned by Claude Desktop via `uv run` on the *host* — containerizing it does
+**not** make Claude Desktop talk to a container. What the image buys you is a
+pinned, reproducible env for running the **ingest script** and exercising the
+server against the DB, plus a CI job that proves the image builds.
+
+The `mcp` service is behind a `server` profile, so the normal dev flow
+(`docker compose up -d`) still starts **only** Postgres — an idle stdio
+container would just sit there. To use it:
+
+```bash
+docker compose --profile server build
+# ingest inside the container (DB comes up automatically, healthcheck-gated):
+docker compose run --rm mcp uv run python scripts/ingest_trials.py --query cancer --max 50
+# sanity-check the server wiring (lists the 4 registered tools):
+docker compose run --rm --no-deps mcp uv run python -c \
+  "import asyncio; from clinical_trial_mcp.server import mcp; print([t.name for t in asyncio.run(mcp.list_tools())])"
+```
+
+(`.env` is picked up if present; the in-container `DATABASE_URL` is overridden
+to the `db` service automatically.)
 
 ---
 
