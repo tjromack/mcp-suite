@@ -14,13 +14,15 @@
 ## 1. What is it?
 
 **Technical:** A Python [Model Context Protocol](https://modelcontextprotocol.io/)
-server that gives Claude Desktop (or any MCP client) three tools over the
-ClinicalTrials.gov dataset: `search_trials` (pgvector cosine semantic search
-over Voyage-embedded trial summaries), `get_trial_details` (live structured
-fetch from the CT.gov v2 API), and `summarize_eligibility` (plain-language
-inclusion/exclusion summary via Claude). `FastMCP` over stdio, async
-throughout (`asyncpg`), 562 trials ingested and embedded, 17 fully-mocked unit
-tests, GitHub Actions CI, MIT licensed, v0.1.0 tagged.
+server that gives Claude Desktop (or any MCP client) four tools over the
+ClinicalTrials.gov dataset: `search_trials` (**hybrid** pgvector cosine +
+Postgres full-text search fused via Reciprocal Rank Fusion over Voyage-embedded
+trial summaries), `find_similar_trials` ("more like this" vector KNN from a
+stored embedding), `get_trial_details` (live structured fetch from the CT.gov
+v2 API), and `summarize_eligibility` (plain-language inclusion/exclusion
+summary via Claude). `FastMCP` over stdio, async throughout (`asyncpg`), 600+
+trials ingested and embedded, 58 fully-mocked unit tests, GitHub Actions CI
+(ruff + mypy + pytest), MIT licensed, v0.1.0 tagged.
 
 **Layman:** A tool that plugs into Claude (the AI assistant) and lets it search
 clinical trials the smart way — by *meaning*, not just keywords — pull up the
@@ -183,22 +185,24 @@ docs, scientific papers, or a company wiki and the plumbing barely changes.
 
 ### 30-second elevator pitch
 
-> "I built an MCP server that gives Claude three tools over ClinicalTrials.gov:
-> semantic search over hundreds of trials stored in pgvector, a live
-> trial-details lookup, and a tool that rewrites dense eligibility criteria
-> into plain English. It runs in Claude Desktop, it's tested and CI-green, and
-> it's a reference pattern for exposing any document corpus to an LLM as real
-> tools."
+> "I built an MCP server that gives Claude four tools over ClinicalTrials.gov:
+> hybrid search (vector + full-text) over hundreds of trials in pgvector, a
+> 'more like this' similar-trials tool, a live trial-details lookup, and a
+> tool that rewrites dense eligibility criteria into plain English. It runs in
+> Claude Desktop, it's tested and CI-green, and it's a reference pattern for
+> exposing any document corpus to an LLM as real tools."
 
 ### 2-minute deeper pitch (for a phone screen)
 
-> "It's a FastMCP server, async end-to-end on asyncpg, with three tools.
-> `search_trials` embeds the query with Voyage and does a pgvector cosine KNN
-> with an ivfflat index. `get_trial_details` fetches live from the CT.gov v2
+> "It's a FastMCP server, async end-to-end on asyncpg, with four tools.
+> `search_trials` is hybrid — it embeds the query with Voyage for a pgvector
+> cosine ranking, runs a Postgres full-text ranking, and fuses them with
+> Reciprocal Rank Fusion. `find_similar_trials` reuses a stored embedding for
+> 'more like this' KNN. `get_trial_details` fetches live from the CT.gov v2
 > API. `summarize_eligibility` pulls criteria from the local DB and has Claude
 > split it into inclusion/exclusion at a patient or clinician reading level.
 > Tools are dependency-injected cores with thin MCP wrappers, so the whole
-> 17-test suite is mocked — hermetic CI, no DB or keys on the runner.
+> 58-test suite is mocked — hermetic CI, no DB or keys on the runner.
 >
 > The interesting part isn't the trial code, which is small. It's the
 > engineering around it: ClinicalTrials.gov sits behind Akamai Bot Manager so
