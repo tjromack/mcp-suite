@@ -88,6 +88,35 @@ def _format_results(source_id: str, query: str, rows: list[asyncpg.Record]) -> s
     return "\n".join(lines)
 
 
+async def query_documents(
+    pool: asyncpg.Pool,
+    source_id: str,
+    query: str,
+    *,
+    vec_literal: str | None = None,
+    top_k: int = 10,
+    offset: int = 0,
+) -> list[asyncpg.Record]:
+    """Hybrid (vector + FTS via RRF) query — returns raw asyncpg Records.
+
+    Public so cross-source tools (e.g. ``summarize_safety_profile`` on the
+    openFDA label server) can run the same hybrid query against multiple
+    ``source_id``s with ONE embedding call: embed the query once via
+    ``embed_text(..., input_type='query')`` + ``to_vector_literal``, pass the
+    literal here on each call.
+
+    Callers are responsible for input validation (empty-string handling and
+    top_k/offset bounds) and exception handling — this helper just runs the
+    SQL.
+    """
+    if vec_literal is None:
+        query_vec = await embed_text(query, input_type="query")
+        vec_literal = to_vector_literal(query_vec)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(_SEARCH_SQL, source_id, vec_literal, query, _RRF_K, top_k, offset)
+    return list(rows)
+
+
 async def semantic_search(
     pool: asyncpg.Pool,
     source_id: str,
@@ -107,15 +136,8 @@ async def semantic_search(
         top_k = max(1, min(top_k, 50))
         offset = max(0, offset)
 
-        query_vec = await embed_text(query, input_type="query")
-        vec_literal = to_vector_literal(query_vec)
-
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                _SEARCH_SQL, source_id, vec_literal, query, _RRF_K, top_k, offset
-            )
-
-        return [TextContent(type="text", text=_format_results(source_id, query, list(rows)))]
+        rows = await query_documents(pool, source_id, query, top_k=top_k, offset=offset)
+        return [TextContent(type="text", text=_format_results(source_id, query, rows))]
     except Exception as exc:  # noqa: BLE001 — tool must not raise out
         logger.exception("semantic_search failed (source_id=%s)", source_id)
         return [
