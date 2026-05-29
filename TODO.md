@@ -1,9 +1,12 @@
-# TODO — Clinical-Trial Search MCP Server
+# TODO — mcp-suite
 
-**Status (2026-05): Phases 1–3 complete.** Server works end-to-end in Claude
-Desktop with 562 ingested trials; 17 tests passing, `ruff`-clean; pushed to a
-private GitHub repo. Phases 1–3 below are kept as the build record. Phase 4 is
-the forward roadmap for portfolio polish.
+**Status (2026-05): Phases 1–4 complete + Phase A (suite refactor) complete on `refactor/mcp-suite-template`.**
+
+- Phases 1–4 shipped clinical-mcp v0.1 end-to-end (4 tools, 600+ trials, 61 tests, CI green, MIT, v0.1.0 released).
+- Phase A refactored the single-server repo into the **shared-`core/` + per-vertical-`servers/<x>/`** suite template — see [`elegant-chasing-glade.md`](elegant-chasing-glade.md) and the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/). 11 commits, 79 tests, `ruff` + `mypy` clean.
+- **Phase B (openFDA server)** and **Phase C (landing page)** are the next strategic items — defined in [`docs/mcp-suite/02-openfda-server-plan.md`](docs/mcp-suite/02-openfda-server-plan.md) and [`docs/mcp-suite/03-pricing-and-positioning.md`](docs/mcp-suite/03-pricing-and-positioning.md) respectively.
+
+Phases 1–4 below are kept as the build record.
 
 ## Phase 1 — Core Infrastructure & Data Pipeline
 > Goal: Postgres running with pgvector, schema applied, 500+ trials ingested and embedded, all verifiable via `psql`.

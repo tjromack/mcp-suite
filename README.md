@@ -4,22 +4,26 @@
 
 [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml)
 
-**Status:** v0.1 of the clinical server is shipped (4 tools — hybrid search, similar-trials, live details, eligibility summary; 600+ trials ingested; validated end-to-end in Claude Desktop; 61 tests; `ruff` + `mypy` clean; CI green). The repo is mid-refactor on `refactor/mcp-suite-template` from single-server into a shared-`core/` + per-vertical-`servers/<x>/` template — see [TODO.md](TODO.md).
+**Status:** the **clinical** server is shipped on the new `core/` + `servers/clinical/` template (3 generic tools + 1 custom; 79 tests; `ruff` + `mypy` clean; CI green). Adding a new vertical (`openfda`, `pubmed`, …) is now ~one day's work: write a `DataSource` connector + a `server.toml` + 0–N custom tools — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/).
 
-📐 **[docs/PROJECT_QA.md](docs/PROJECT_QA.md)** — what it is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
+📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
 ---
 
 ## What It Is
 
-A Python [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives Claude Desktop (or any MCP client) four tools over the ClinicalTrials.gov public dataset:
+A Python [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) **suite** of servers over curated, embedded, continuously-refreshed life-sciences data. Each server (one per source / vertical) implements a single `DataSource` Protocol and gets the generic tools for free; verticals add their own LLM-backed custom tools.
 
-| Tool | What it does |
-|---|---|
-| `search_trials` | **Hybrid** search (pgvector cosine + Postgres full-text, fused via Reciprocal Rank Fusion) over 600+ trial summaries |
-| `find_similar_trials` | "More like this" — vector KNN from an ingested trial's stored embedding |
-| `get_trial_details` | Fetches live structured JSON for any trial by NCT ID |
-| `summarize_eligibility` | Converts dense inclusion/exclusion criteria into plain English via Claude |
+The **clinical** server is the first one shipped — it gives Claude Desktop four tools over the ClinicalTrials.gov public dataset:
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `semantic_search` | generic | **Hybrid** search (pgvector cosine + Postgres full-text, fused via Reciprocal Rank Fusion) over the clinical corpus |
+| `find_similar` | generic | "More like this" — vector KNN from an ingested document's stored embedding |
+| `get_details` | generic | Fetches the full structured record for one document via the connector (live API for clinical) |
+| `summarize_eligibility` | clinical-custom | Converts dense inclusion/exclusion criteria into plain English via Claude |
+
+> **Heads-up for upgraders:** the tool names changed in the Phase-A refactor. Old names (`search_trials`, `find_similar_trials`, `get_trial_details`) → new generic names (`semantic_search`, `find_similar`, `get_details`). `summarize_eligibility` is unchanged.
 
 ## Why It Exists
 
@@ -47,7 +51,7 @@ Clinical trial eligibility criteria are notoriously hard to parse — dense medi
 
 ![Clinical-Trial MCP server in Claude Desktop — semantic search, live trial details, and a plain-language eligibility summary](docs/demo.gif)
 
-*Claude Desktop calling `search_trials` → `get_trial_details` → `summarize_eligibility` over the local pgvector dataset and the live ClinicalTrials.gov API.*
+*Claude Desktop calling `semantic_search` → `get_details` → `summarize_eligibility` over the local pgvector dataset and the live ClinicalTrials.gov API. (Recorded pre-refactor under the old tool names — behaviour is identical.)*
 
 ---
 
@@ -57,12 +61,13 @@ Clinical trial eligibility criteria are notoriously hard to parse — dense medi
 flowchart LR
     client["MCP client<br/>(Claude Desktop / MCP Inspector)"]
 
-    subgraph server["FastMCP server (stdio)"]
+    subgraph server["FastMCP server — core/server.py (stdio)"]
         direction TB
-        lifespan["lifespan:<br/>asyncpg pool open/close"]
-        st["search_trials"]
-        gtd["get_trial_details"]
-        se["summarize_eligibility"]
+        lifespan["lifespan:<br/>asyncpg pool + connector"]
+        ss["semantic_search (generic)"]
+        fs["find_similar (generic)"]
+        gd["get_details (generic)"]
+        se["summarize_eligibility (clinical-custom)"]
     end
 
     subgraph ext["External services"]
@@ -71,26 +76,28 @@ flowchart LR
         ctgov["ClinicalTrials.gov<br/>v2 API (Akamai)"]
     end
 
-    pg[("PostgreSQL 16<br/>+ pgvector")]
+    pg[("PostgreSQL 16<br/>+ pgvector<br/>documents table")]
 
     client -- "JSON-RPC / stdio" --> server
 
-    st -- "embed query" --> voyage
-    st -- "cosine KNN" --> pg
-    gtd -- "curl_cffi<br/>browser-impersonated" --> ctgov
-    se -- "read criteria" --> pg
+    ss -- "embed query" --> voyage
+    ss -- "hybrid (cosine + FTS via RRF)" --> pg
+    fs -- "stored-vector KNN" --> pg
+    gd -- "connector.get_raw via<br/>curl_cffi (Akamai-safe)" --> ctgov
+    se -- "read criteria from structured JSONB" --> pg
     se -- "summarize" --> anthropic
 
-    ingest["scripts/ingest_trials.py"] -- "paginated fetch" --> ctgov
+    ingest["python -m core.ingest --source clinical"] -- "paginated fetch" --> ctgov
     ingest -- "batched embed" --> voyage
-    ingest -- "upsert ON CONFLICT" --> pg
+    ingest -- "upsert ON CONFLICT (source_id, doc_id)" --> pg
 ```
 
-**Flow:** an MCP client drives the FastMCP server over stdio. `search_trials`
-is local-only (Voyage embeds the query, pgvector ranks by cosine distance).
-`get_trial_details` fetches live through the Akamai-safe `curl_cffi` client.
-`summarize_eligibility` reads criteria from Postgres and has Claude rewrite
-them. The ingest script populates pgvector ahead of time (one Voyage call per
+**Flow:** an MCP client drives the FastMCP server over stdio. `semantic_search`
+is local-only (Voyage embeds the query, pgvector ranks via RRF over cosine + FTS).
+`get_details` fetches live through the Akamai-safe `curl_cffi` client wrapped
+inside the clinical connector. `summarize_eligibility` reads from the local
+`documents` table and has Claude rewrite the criteria. The generic ingest
+runner populates pgvector ahead of time (one Voyage call per
 batch). Tools never raise — every failure returns `TextContent`.
 
 ---
@@ -138,23 +145,25 @@ Pipe the DDL into the container's `psql` (no local `psql` needed):
 
 ```bash
 # bash / macOS / Linux
-docker compose exec -T db psql -U ctmcp -d clinical_trials < src/clinical_trial_mcp/db/schema.sql
+docker compose exec -T db psql -U ctmcp -d clinical_trials < core/store/schema.sql
 ```
 
 ```powershell
 # Windows PowerShell ( `<` redirection is unsupported there )
-Get-Content src/clinical_trial_mcp/db/schema.sql | docker compose exec -T db psql -U ctmcp -d clinical_trials
+Get-Content core/store/schema.sql | docker compose exec -T db psql -U ctmcp -d clinical_trials
 ```
 
-### 5. Ingest trials
+### 5. Ingest a corpus
+
+The generic runner discovers each server from its `server.toml` (the clinical server's queries live in [`servers/clinical/server.toml`](servers/clinical/server.toml) under the `[connector]` table):
 
 ```bash
-# ~500 trials matching 'cancer', embed summaries, store in pgvector
-uv run python scripts/ingest_trials.py --query cancer --max 500
-
-# --query is repeatable for a broader dataset (--max is per query):
-uv run python scripts/ingest_trials.py --query cancer --query diabetes --max 300
+uv run python -m core.ingest --source clinical
+# optional incremental refresh (advisory):
+uv run python -m core.ingest --source clinical --since 2026-01-01
 ```
+
+`scripts/ingest_trials.py` is now a thin compat shim that delegates to the generic runner with `--source clinical` — old muscle-memory commands keep working.
 
 ### 6. Run the MCP server
 
@@ -275,7 +284,7 @@ behind a TLS-intercepting proxy (corporate firewall / AV SSL scanning). Run
 `uv sync --native-tls` or set `UV_NATIVE_TLS=1`. At runtime, Python's HTTP
 calls use the OS trust store via `truststore` (auto-registered on import).
 
-**`get_trial_details` / ingest gets `403 Forbidden` from ClinicalTrials.gov** —
+**`get_details` / ingest gets `403 Forbidden` from ClinicalTrials.gov** —
 the API is behind Akamai Bot Manager, which fingerprints standard HTTP clients.
 This project uses `curl_cffi` with browser impersonation to get through; no
 action needed. If a future Akamai change breaks it, pin a specific browser via
@@ -294,17 +303,29 @@ method on file even for free-tier usage. Add one in the Voyage dashboard.
 ## Project Structure
 
 ```
-clinical-mcp/
-├── src/clinical_trial_mcp/
-│   ├── server.py            # FastMCP server + tool registration + lifespan
-│   ├── __main__.py          # python -m clinical_trial_mcp
-│   ├── ctgov.py             # shared curl_cffi ClinicalTrials.gov client
-│   ├── tools/               # search_trials, get_trial_details, summarize_eligibility
-│   ├── db/                  # asyncpg pool + schema.sql
-│   ├── embeddings.py        # Voyage AI embedding wrapper + vector literal
-│   └── config.py            # pydantic-settings
-└── scripts/
-    └── ingest_trials.py     # one-shot data population (repeatable --query)
+mcp-suite/
+├── core/                              # shared, vertical-agnostic substrate
+│   ├── document.py                    # canonical Document Pydantic model (doc 01 §4)
+│   ├── connector.py                   # DataSource Protocol (doc 01 §3)
+│   ├── store/{connection,schema.sql}  # asyncpg pool + generic `documents` table (doc 01 §5)
+│   ├── embeddings.py                  # Voyage wrapper (embed_text + embed_texts batched)
+│   ├── cache.py                       # process-local TTL cache primitive
+│   ├── config.py                      # pydantic-settings base config
+│   ├── tools/                         # generic semantic_search / get_details / find_similar
+│   ├── ingest.py                      # generic CLI: python -m core.ingest --source <id>
+│   └── server.py                      # FastMCP entry point — reads server.toml, registers tools
+│
+├── servers/                           # one subdir per vertical
+│   └── clinical/
+│       ├── connector.py               # CTGovConnector(DataSource) wrapping ctgov.py
+│       ├── ctgov.py                   # Akamai-safe curl_cffi client for CT.gov v2
+│       ├── tools.py                   # summarize_eligibility (clinical-specific LLM tool)
+│       └── server.toml                # source_id, embed_fields, generic + custom tool roster
+│
+├── src/clinical_trial_mcp/            # Phase-A compat shims for old entry-point commands
+├── scripts/ingest_trials.py           # compat shim → core.ingest --source clinical
+├── docs/mcp-suite/                    # the strategy docs (canonical copy lives in dev-dashboard)
+└── mcp_platform/                      # placeholder: future gateway/billing/deploy layer
 ```
 
 ---
