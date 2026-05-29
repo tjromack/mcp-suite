@@ -1,26 +1,37 @@
-"""summarize_eligibility tool — plain-language eligibility summary via Claude.
+"""Clinical-server custom tools.
 
-Reads eligibility_criteria from the LOCAL DB (no ClinicalTrials.gov call —
-the trial must have been ingested), then asks Claude to restructure it into
-clear inclusion / exclusion sections at the requested reading level.
+`summarize_eligibility` is the clinical vertical's LLM tool — the equivalent
+of `summarize_safety_profile` in the future openFDA server. It reads from
+the local `documents` table (no live API), pulls `eligibility_criteria` out
+of the `structured` payload that `CTGovConnector.normalize` wrote, and asks
+Claude to rewrite it into clear inclusion / exclusion sections at the
+requested reading level.
+
+Adapted from the pre-refactor `clinical_trial_mcp.tools.summarize_eligibility`.
 """
 
 from __future__ import annotations
 
 import logging
 
-import asyncpg
 from anthropic import AsyncAnthropic
 from anthropic.types import TextBlock
 from mcp.types import TextContent
 
-from clinical_trial_mcp.config import settings
+from core.config import settings
+from core.store.connection import get_pool
 
-logger = logging.getLogger("clinical_trial_mcp.summarize_eligibility")
+logger = logging.getLogger("servers.clinical.tools.summarize_eligibility")
 
 _VALID_READING_LEVELS = ("patient", "clinician")
 
-_LOOKUP_SQL = "SELECT brief_title, eligibility_criteria FROM trials WHERE nct_id = $1"
+# Generic schema: pull title and the relevant structured field from documents
+# scoped by source_id='clinical'.
+_LOOKUP_SQL = """
+SELECT title, structured->>'eligibility_criteria' AS eligibility_criteria
+FROM documents
+WHERE source_id = 'clinical' AND doc_id = $1
+"""
 
 _SYSTEM_PROMPT = """You are a clinical-trial eligibility explainer. You are given \
 the raw inclusion/exclusion criteria text for one trial. Rewrite it into two \
@@ -45,31 +56,30 @@ def _get_client() -> AsyncAnthropic:
 
 
 async def summarize_eligibility(
-    pool: asyncpg.Pool,
-    nct_id: str,
+    doc_id: str,
     reading_level: str = "patient",
 ) -> list[TextContent]:
-    """Summarize a trial's eligibility criteria in plain language.
+    """Summarize a clinical trial's eligibility criteria in plain language.
 
     ``reading_level`` is validated here (the single source of truth) — anything
     other than "patient"/"clinician" falls back to "patient".
     Errors are returned as TextContent, never raised (MCP tool contract).
     """
     try:
-        nct_id = (nct_id or "").strip().upper()
+        doc_id = (doc_id or "").strip().upper()
         if reading_level not in _VALID_READING_LEVELS:
             reading_level = "patient"
 
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(_LOOKUP_SQL, nct_id)
+        async with get_pool().acquire() as conn:
+            row = await conn.fetchrow(_LOOKUP_SQL, doc_id)
 
         if row is None:
             return [
                 TextContent(
                     type="text",
                     text=(
-                        f"{nct_id} is not in the local database. Ingest it first, "
-                        f"or use search_trials to find ingested trials."
+                        f"{doc_id} is not in the local clinical corpus. Ingest it "
+                        f"first, or use semantic_search to find ingested trials."
                     ),
                 )
             ]
@@ -79,12 +89,12 @@ async def summarize_eligibility(
             return [
                 TextContent(
                     type="text",
-                    text=f"{nct_id} ({row['brief_title']}) has no eligibility criteria text.",
+                    text=f"{doc_id} ({row['title']}) has no eligibility criteria text.",
                 )
             ]
 
         user_prompt = (
-            f"Trial: {row['brief_title']} ({nct_id})\n"
+            f"Trial: {row['title']} ({doc_id})\n"
             f"Reading level: {reading_level}\n\n"
             f"Raw eligibility criteria:\n{criteria}"
         )
@@ -103,7 +113,7 @@ async def summarize_eligibility(
         if not text:
             text = "Claude returned an empty summary."
 
-        header = f"Eligibility summary for {nct_id} ({reading_level} reading level)\n"
+        header = f"Eligibility summary for {doc_id} ({reading_level} reading level)\n"
         return [TextContent(type="text", text=header + "\n" + text)]
     except Exception as exc:  # noqa: BLE001 — tool must not raise out
         logger.exception("summarize_eligibility failed")

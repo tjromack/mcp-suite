@@ -1,6 +1,6 @@
-"""Enables `python -m clinical_trial_mcp.server` and `python -m clinical_trial_mcp`."""
+"""`python -m clinical_trial_mcp` → core.server.main()."""
 
-from clinical_trial_mcp.server import main
+from core.server import main
 
 if __name__ == "__main__":
     main()

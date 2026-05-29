@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from clinical_trial_mcp.config import Settings
-from clinical_trial_mcp.config import settings as singleton
+from core.config import Settings
+from core.config import settings as singleton
 
 _ENV_KEYS = [
     "DATABASE_URL",
@@ -69,6 +69,6 @@ def test_case_insensitive_env(clean_env):
 def test_singleton_is_settings_instance():
     assert isinstance(singleton, Settings)
     # Re-importing returns the same cached module-level object.
-    from clinical_trial_mcp.config import settings as again
+    from core.config import settings as again
 
     assert again is singleton

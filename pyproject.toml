@@ -1,7 +1,7 @@
 [project]
 name = "clinical-trial-mcp"
 version = "0.1.0"
-description = "MCP server that wraps ClinicalTrials.gov with pgvector-powered semantic search"
+description = "mcp-suite — a shared core + per-vertical MCP servers over curated life-sciences data (clinical server in v0.1; openFDA, PubMed planned). Distribution name kept as 'clinical-trial-mcp' through Phase A to preserve existing claude_desktop_config.json entries; will rename once a publishable package story exists."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -18,6 +18,13 @@ dependencies = [
     "truststore>=0.9.0",
 ]
 
+# Per-server extras: enable selective installs once verticals add deps
+# beyond what core needs (e.g. `pip install clinical-trial-mcp[openfda]`).
+# Empty during Phase A — declared so the structure is visible early.
+[project.optional-dependencies]
+clinical = []
+openfda = []
+
 # PEP 735 dependency group — uv installs this by default on `uv sync`,
 # unlike [project.optional-dependencies] which needs an explicit --extra.
 [dependency-groups]
@@ -33,7 +40,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/clinical_trial_mcp"]
+packages = ["src/clinical_trial_mcp", "core", "servers"]
 
 [tool.ruff]
 line-length = 100
@@ -48,7 +55,7 @@ testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/clinical_trial_mcp"]
+files = ["src/clinical_trial_mcp", "core", "servers"]
 # Third-party libs (mcp, voyageai, curl_cffi, asyncpg, anthropic) ship no
 # stubs — don't fail the gate on their missing types.
 ignore_missing_imports = true

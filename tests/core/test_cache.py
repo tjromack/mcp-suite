@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from clinical_trial_mcp.cache import TTLCache
+from core.cache import TTLCache
 
 
 class FakeClock:

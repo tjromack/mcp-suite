@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from clinical_trial_mcp import ctgov
-from clinical_trial_mcp.ctgov import fetch_studies_page, fetch_study, verify_setting
+from servers.clinical import ctgov
+from servers.clinical.ctgov import fetch_studies_page, fetch_study, verify_setting
 
 # --- verify_setting --------------------------------------------------------
 

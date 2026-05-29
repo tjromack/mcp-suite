@@ -23,7 +23,7 @@ from voyageai.error import (
     Timeout,
 )
 
-from clinical_trial_mcp.config import settings
+from core.config import settings
 
 # Character-level truncation cap. voyage-3 supports ~32k tokens of context;
 # 8000 chars is well under that and keeps the call lightweight. A real

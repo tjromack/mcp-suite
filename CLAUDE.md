@@ -1,14 +1,28 @@
-# CLAUDE.md — Clinical-Trial Search MCP Server
+# CLAUDE.md — mcp-suite
+
+> Phase-A status: the single-server clinical-mcp has been refactored into a
+> **shared-`core/` + per-vertical-`servers/<x>/` template** (see
+> [`elegant-chasing-glade.md`](elegant-chasing-glade.md) for the execution
+> plan and [`docs/mcp-suite/`](docs/mcp-suite/) for the canonical strategy
+> docs). The clinical server is the first vertical shipped; openFDA and
+> friends become ~one-day builds on top of the contracts.
 
 ## Project Purpose
-A Python MCP (Model Context Protocol) server that wraps the ClinicalTrials.gov public REST API and adds pgvector-powered semantic search over trial summaries. The server exposes four tools consumable by Claude Desktop or any MCP-compatible client:
+A Python MCP (Model Context Protocol) **suite** of servers backed by curated,
+embedded, continuously-refreshed authoritative data. Each server (one per
+data source / vertical) implements a single `DataSource` Protocol and gets
+the generic tools for free; verticals add their own LLM-backed custom tools.
 
-1. **`search_trials`** — hybrid search: fuses pgvector cosine ranking with Postgres full-text ranking via Reciprocal Rank Fusion over stored trial summaries
-2. **`find_similar_trials`** — "more like this": vector KNN from an ingested trial's stored embedding (no query embedding call)
-3. **`get_trial_details`** — fetches full structured JSON for a specific trial from ClinicalTrials.gov
-4. **`summarize_eligibility`** — calls Claude (Anthropic API) to produce plain-language eligibility summaries from raw criteria text
+The **clinical** server exposes four tools — three generic, one custom:
 
-This is a portfolio project demonstrating: MCP server authoring, pgvector semantic search against real NLP-heavy data, and LLM-assisted text processing.
+1. **`semantic_search`** *(generic)* — hybrid search: fuses pgvector cosine ranking with Postgres full-text ranking via Reciprocal Rank Fusion over the `documents` table, scoped by `source_id="clinical"`
+2. **`find_similar`** *(generic)* — "more like this": vector KNN from an ingested document's stored embedding (no query embedding call)
+3. **`get_details`** *(generic)* — fetches the full structured record for one document via the connector's `get_raw(doc_id)` (for clinical: live ClinicalTrials.gov v2 fetch through `curl_cffi`, with TTL cache)
+4. **`summarize_eligibility`** *(clinical-custom)* — calls Claude (Anthropic API) to produce plain-language eligibility summaries from raw criteria text
+
+This is a portfolio project demonstrating: MCP server authoring, pgvector
+semantic search against real NLP-heavy data, LLM-assisted text processing,
+and (post-A) a re-usable architectural template for adding new verticals.
 
 ---
 

@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Singleton settings object. Import via `from clinical_trial_mcp.config import settings`."""
+    """Singleton settings object. Import via `from core.config import settings`."""
 
     model_config = SettingsConfigDict(
         env_file=".env",

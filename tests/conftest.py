@@ -13,25 +13,34 @@ import pytest
 from anthropic.types import TextBlock
 
 
-class _AcquireCtx:
-    """Mimics `async with pool.acquire() as conn:`."""
+class _AsyncCtx:
+    """Generic async context manager — yields a value, swallows nothing."""
 
-    def __init__(self, conn: MagicMock) -> None:
-        self._conn = conn
+    def __init__(self, value: object = None) -> None:
+        self._value = value
 
-    async def __aenter__(self) -> MagicMock:
-        return self._conn
+    async def __aenter__(self) -> object:
+        return self._value
 
     async def __aexit__(self, *_exc: object) -> bool:
         return False
 
 
+# Backwards-compat alias for the earlier name used in this file.
+_AcquireCtx = _AsyncCtx
+
+
 @pytest.fixture
 def mock_conn() -> MagicMock:
-    """A fake asyncpg connection with awaitable fetch/fetchrow."""
+    """A fake asyncpg connection with awaitable fetch/fetchrow/executemany
+    and a transaction() that's an async context manager."""
     conn = MagicMock(name="conn")
     conn.fetch = AsyncMock(return_value=[])
     conn.fetchrow = AsyncMock(return_value=None)
+    conn.executemany = AsyncMock(return_value=None)
+    conn.execute = AsyncMock(return_value=None)
+    # transaction() must be `async with`-able.
+    conn.transaction = MagicMock(return_value=_AsyncCtx())
     return conn
 
 
