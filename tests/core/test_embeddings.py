@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from voyageai.error import RateLimitError, Timeout
 
-from clinical_trial_mcp import embeddings
-from clinical_trial_mcp.embeddings import _MAX_INPUT_CHARS, embed_text, embed_texts
+from core import embeddings
+from core.embeddings import _MAX_INPUT_CHARS, embed_text, embed_texts
 
 
 def _resp(vectors: list[list[float]]) -> SimpleNamespace:
