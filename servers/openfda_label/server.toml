@@ -1,0 +1,30 @@
+# openFDA — drug label server.
+# Consumed by core/server.py when MCP_SUITE_SOURCE=openfda_label and by
+# core/ingest.py when invoked with --source openfda_label.
+
+source_id    = "openfda_label"
+embed_fields = [
+    "openfda.brand_name",
+    "openfda.generic_name",
+    "indications_and_usage",
+    "warnings",
+    "boxed_warning",
+    "contraindications",
+    "adverse_reactions",
+]
+
+# Generic tools come from core/tools/ — zero per-vertical code.
+generic_tools = ["semantic_search", "get_details", "find_similar"]
+
+# Custom tool: cross-source LLM synthesizer (queries openfda_label +
+# openfda_event + openfda_enforcement). Lives in servers/openfda_label/tools.py.
+custom_tools = ["summarize_safety_profile"]
+
+[connector]
+# Empty `search` = scan the whole corpus. Provide a Lucene-style search clause
+# here (without the `search=` prefix) to scope the backfill.
+# Example: search = 'openfda.product_type:"HUMAN PRESCRIPTION DRUG"'
+# max_records caps the fetch (None = full scan; useful for sanity runs).
+# page_size is openFDA's `limit` — max 1000, but 100 is a polite default.
+page_size = 100
+# max_records = 50  # uncomment for capped ingest; omit for full scan
