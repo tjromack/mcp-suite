@@ -18,6 +18,13 @@ dependencies = [
     "truststore>=0.9.0",
 ]
 
+# Per-server extras: enable selective installs once verticals add deps
+# beyond what core needs (e.g. `pip install clinical-trial-mcp[openfda]`).
+# Empty during Phase A — declared so the structure is visible early.
+[project.optional-dependencies]
+clinical = []
+openfda = []
+
 # PEP 735 dependency group — uv installs this by default on `uv sync`,
 # unlike [project.optional-dependencies] which needs an explicit --extra.
 [dependency-groups]
