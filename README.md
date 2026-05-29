@@ -1,10 +1,10 @@
-# 🧬 Clinical-Trial Search MCP Server
+# 🧬 mcp-suite
 
-> Semantic search over ClinicalTrials.gov — as an MCP tool your AI assistant can actually use.
+> A suite of life-sciences MCP servers backed by curated, embedded, continuously-refreshed authoritative data — `ClinicalTrials.gov` today, with `openFDA`, `PubMed`, and more on the roadmap.
 
-[![CI](https://github.com/tjromack/clinical-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/clinical-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml)
 
-**Status:** v0.1 — 4 tools working (hybrid search, similar-trials, live details, eligibility summary), 600+ trials ingested, validated end-to-end in Claude Desktop. 58 tests passing, `ruff` + `mypy` clean, CI green. See [TODO.md](TODO.md) for the roadmap.
+**Status:** v0.1 of the clinical server is shipped (4 tools — hybrid search, similar-trials, live details, eligibility summary; 600+ trials ingested; validated end-to-end in Claude Desktop; 61 tests; `ruff` + `mypy` clean; CI green). The repo is mid-refactor on `refactor/mcp-suite-template` from single-server into a shared-`core/` + per-vertical-`servers/<x>/` template — see [TODO.md](TODO.md).
 
 📐 **[docs/PROJECT_QA.md](docs/PROJECT_QA.md)** — what it is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 

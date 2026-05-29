@@ -1,7 +1,7 @@
 [project]
 name = "clinical-trial-mcp"
 version = "0.1.0"
-description = "MCP server that wraps ClinicalTrials.gov with pgvector-powered semantic search"
+description = "mcp-suite — a shared core + per-vertical MCP servers over curated life-sciences data (clinical server in v0.1; openFDA, PubMed planned). Distribution name kept as 'clinical-trial-mcp' through Phase A to preserve existing claude_desktop_config.json entries; will rename once a publishable package story exists."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
