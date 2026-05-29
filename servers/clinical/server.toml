@@ -1,0 +1,23 @@
+# Clinical server declaration — consumed by core/server.py (A8) to wire the
+# generic tools + custom tools and start the MCP server over stdio.
+#
+# Follows the shape from doc 01 §6.
+
+source_id    = "clinical"
+embed_fields = ["brief_title", "brief_summary"]
+
+# Generic tools provided by core/tools/ — parameterized by source_id, zero
+# per-vertical code.
+generic_tools = ["semantic_search", "get_details", "find_similar"]
+
+# Custom tools defined in servers/clinical/tools.py — the vertical-specific
+# LLM tool. Discovered by name; each entry is a function name exported from
+# the module.
+custom_tools = ["summarize_eligibility"]
+
+# Optional connector configuration. core/server.py reads this when
+# instantiating CTGovConnector.
+[connector]
+queries        = ["cancer"]
+page_size      = 100
+# max_per_query = 500  # uncomment for capped ingest; omit for full scan
