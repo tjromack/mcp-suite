@@ -95,7 +95,8 @@ async def test_flush_batch_embeds_and_executemany(mock_pool, mock_conn):
     sql, records = mock_conn.executemany.await_args.args
     assert "INSERT INTO documents" in sql
     assert len(records) == 3
-    # First record positional: (source_id, doc_id, title, embed_text, structured_json, url, updated_at, vec)
+    # First record positional: source_id, doc_id, title, embed_text,
+    # structured_json, url, updated_at, vec.
     first = records[0]
     assert first[0] == "clinical"
     assert first[1] == "A"
