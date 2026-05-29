@@ -30,11 +30,17 @@ class DataSource(Protocol):
     embedded text. Documented per connector so future re-embeds are
     reproducible."""
 
-    async def fetch(self, since: datetime | None) -> AsyncIterator[dict]:
+    def fetch(self, since: datetime | None) -> AsyncIterator[dict]:
         """Yield raw upstream records, incrementally when `since` is given.
 
         Async generator — the ingest runner consumes it one record at a time
         so memory stays bounded even on full backfills.
+
+        Note: typed as a plain ``def`` returning ``AsyncIterator`` (not
+        ``async def``) so a Python ``async def`` + ``yield`` implementation
+        type-checks correctly: calling such a function returns the async
+        iterator immediately rather than a coroutine. Doc 01 §3 writes it
+        as ``async def`` for readability; this is the mypy-correct form.
         """
         ...
 

@@ -179,3 +179,9 @@ class CTGovConnector:
         if raw is not None:
             self._cache.set(nct_id, raw)
         return raw
+
+
+# Convention: each server's connector.py exports `CONNECTOR_CLASS` so the
+# generic ingest runner and core/server.py can discover it without naming
+# heuristics. See core/ingest.py and (later) core/server.py.
+CONNECTOR_CLASS = CTGovConnector
