@@ -1,4 +1,9 @@
-# platform/ — gateway / billing / deploy (placeholder)
+# mcp_platform/ — gateway / billing / deploy (placeholder)
+
+> **Naming note:** the plan calls this `platform/`, but a top-level
+> `platform/` package shadows Python's stdlib `platform` module (which
+> pytest itself imports during collection), so it's renamed to
+> `mcp_platform/`. Function and scope are unchanged from the plan.
 
 Not part of Phase A. Reserved for the cross-cutting "suite" layer once two or
 more servers are live and the strategy doc's metering / Pro/Suite tiers are
