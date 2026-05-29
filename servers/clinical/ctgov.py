@@ -16,7 +16,7 @@ from typing import Any
 
 from curl_cffi.requests import AsyncSession
 
-from clinical_trial_mcp.config import settings
+from core.config import settings
 
 API_BASE_URL = "https://clinicaltrials.gov/api/v2/studies"
 HTTP_TIMEOUT_SECONDS = 30.0

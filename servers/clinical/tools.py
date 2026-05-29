@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import logging
 
-import asyncpg
 from anthropic import AsyncAnthropic
 from anthropic.types import TextBlock
 from mcp.types import TextContent
 
 from core.config import settings
+from core.store.connection import get_pool
 
 logger = logging.getLogger("servers.clinical.tools.summarize_eligibility")
 
@@ -56,7 +56,6 @@ def _get_client() -> AsyncAnthropic:
 
 
 async def summarize_eligibility(
-    pool: asyncpg.Pool,
     doc_id: str,
     reading_level: str = "patient",
 ) -> list[TextContent]:
@@ -71,7 +70,7 @@ async def summarize_eligibility(
         if reading_level not in _VALID_READING_LEVELS:
             reading_level = "patient"
 
-        async with pool.acquire() as conn:
+        async with get_pool().acquire() as conn:
             row = await conn.fetchrow(_LOOKUP_SQL, doc_id)
 
         if row is None:

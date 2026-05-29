@@ -1,8 +1,7 @@
 """CTGovConnector — the clinical server's `DataSource` over ClinicalTrials.gov v2.
 
-Wraps the existing Akamai-safe `curl_cffi` client in `core` (the suite-level
-`ctgov.py` will move under `servers/clinical/` in a later refactor; for now we
-import from the existing module at the package root).
+Wraps the Akamai-safe `curl_cffi` client in `servers.clinical.ctgov` (moved
+under this directory in A8 as part of the suite refactor).
 
 PR #4's TTL response cache lives here (not in the generic `get_details` tool)
 so each connector can pick its own caching policy.
@@ -17,10 +16,10 @@ from typing import Any
 
 from curl_cffi.requests import AsyncSession
 
-from clinical_trial_mcp.ctgov import fetch_studies_page, fetch_study
 from core.cache import TTLCache
 from core.config import settings
 from core.document import Document
+from servers.clinical.ctgov import fetch_studies_page, fetch_study
 
 _NCT_RE = re.compile(r"^NCT\d{8}$")
 _DEFAULT_PAGE_SIZE = 100
