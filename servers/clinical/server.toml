@@ -20,4 +20,4 @@ custom_tools = ["summarize_eligibility"]
 [connector]
 queries        = ["cancer"]
 page_size      = 100
-# max_per_query = 500  # uncomment for capped ingest; omit for full scan
+# max_per_query = 50  # uncomment for capped ingest; omit for full scan
