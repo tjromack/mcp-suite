@@ -5,12 +5,12 @@
 [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml)
 
 **Status:** the **clinical** and **openFDA** servers are shipped on the shared `core/` + per-vertical `servers/<x>/` template. The suite now covers:
-- **clinical** — ClinicalTrials.gov (3 generic tools + `summarize_eligibility`)
+- **clinical** — ClinicalTrials.gov (3 generic tools + `summarize_eligibility` + `drug_context_for_trial` — joins a trial's interventions against the local openFDA corpora)
 - **openfda_label** — FDA drug labels (3 generic tools + `summarize_safety_profile` — synthesizes labels + FAERS + recalls for one drug)
 - **openfda_event** — FAERS adverse-event reports (3 generic tools)
 - **openfda_enforcement** — FDA drug recalls (3 generic tools)
 
-127 tests, `ruff` + `mypy` clean, CI green. Adding the next vertical (`pubmed`, `sec_edgar`, …) is now ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/).
+134 tests, `ruff` + `mypy` clean, CI green. Adding the next vertical (`pubmed`, `sec_edgar`, …) is now ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/).
 
 📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
@@ -24,7 +24,7 @@ Each server exposes the same three **generic** tools (`semantic_search`, `find_s
 
 | Server | Generic tools | Custom tools |
 |---|---|---|
-| **clinical** (ClinicalTrials.gov) | `semantic_search` · `find_similar` · `get_details` | `summarize_eligibility` — plain-English inclusion/exclusion at patient or clinician reading level |
+| **clinical** (ClinicalTrials.gov) | `semantic_search` · `find_similar` · `get_details` | `summarize_eligibility` — plain-English inclusion/exclusion at patient or clinician reading level<br>`drug_context_for_trial` — **cross-source SQL join**: extracts an NCT's interventions and surfaces their openFDA label / FAERS / recall context |
 | **openfda_label** (FDA SPL drug labels) | same | `summarize_safety_profile` — **cross-source**: queries labels + FAERS + recalls for one drug, single Voyage embedding, one Claude call, baked-in FDA disclaimer |
 | **openfda_event** (FAERS adverse events) | same | — |
 | **openfda_enforcement** (FDA drug recalls) | same | — |
