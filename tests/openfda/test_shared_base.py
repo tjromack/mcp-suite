@@ -1,17 +1,22 @@
-"""Unit tests for OpenFDAConnectorBase (fetch paging, get_raw, helpers)."""
+"""Unit tests for OpenFDAConnectorBase (fetch paging, get_raw, helpers,
+retry on transient errors, api_key log redaction)."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from core.document import Document
 from servers.openfda_shared import _base as base_mod
 from servers.openfda_shared._base import (
     OpenFDAConnectorBase,
+    _get_with_retry,
+    _redact_url,
     first,
     join_arrays,
     yyyymmdd_to_dt,
@@ -120,10 +125,15 @@ def test_base_params_empty_when_no_key():
 
 
 class _FakeClient:
-    """Stand-in for `async with httpx.AsyncClient(...) as client:`."""
+    """Stand-in for `async with httpx.AsyncClient(...) as client:`.
 
-    def __init__(self, *responses: MagicMock) -> None:
-        self._responses = list(responses)
+    Each item in ``responses`` is either a ``MagicMock`` (returned) or an
+    ``Exception`` instance (raised). This lets one test stage a sequence
+    like ``[500, 500, 200]`` or ``[Timeout, 200]`` to exercise retry.
+    """
+
+    def __init__(self, *responses: MagicMock | BaseException) -> None:
+        self._responses: list[MagicMock | BaseException] = list(responses)
         self.calls: list[dict] = []
 
     async def __aenter__(self) -> _FakeClient:
@@ -134,7 +144,17 @@ class _FakeClient:
 
     async def get(self, url: str, params: dict) -> MagicMock:
         self.calls.append({"url": url, "params": dict(params)})
-        return self._responses.pop(0)
+        nxt = self._responses.pop(0)
+        if isinstance(nxt, BaseException):
+            raise nxt
+        return nxt
+
+
+@pytest.fixture
+def _no_sleep():
+    """Make the retry helper's backoff a no-op so tests don't burn 17s of sleep."""
+    with patch.object(base_mod.asyncio, "sleep", new=AsyncMock(return_value=None)) as m:
+        yield m
 
 
 def _resp(status: int, results: list[dict] | None = None) -> MagicMock:
@@ -221,3 +241,141 @@ async def test_fetch_protocol_returns_async_iterator():
     # Sanity: fetch is callable without await and returns an async iterator.
     it: AsyncIterator[dict] = _Probe().fetch(since=None)
     assert hasattr(it, "__aiter__")
+
+
+# --- _redact_url -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        (
+            "https://api.fda.gov/drug/label.json?api_key=SECRETXYZ&skip=0&limit=100",
+            "https://api.fda.gov/drug/label.json?api_key=REDACTED&skip=0&limit=100",
+        ),
+        (
+            "https://api.fda.gov/drug/event.json?skip=0&api_key=SECRETXYZ",
+            "https://api.fda.gov/drug/event.json?skip=0&api_key=REDACTED",
+        ),
+        # No api_key — URL is returned untouched.
+        (
+            "https://api.fda.gov/drug/label.json?skip=0&limit=100",
+            "https://api.fda.gov/drug/label.json?skip=0&limit=100",
+        ),
+        # No query string — URL is returned untouched.
+        ("https://api.fda.gov/drug/label.json", "https://api.fda.gov/drug/label.json"),
+    ],
+)
+def test_redact_url_strips_api_key(given, expected):
+    assert _redact_url(given) == expected
+
+
+def test_httpx_logger_silenced_at_import():
+    # The module sets httpx's logger to WARNING so its default
+    # `INFO HTTP Request: GET <full URL>` line — which contains the
+    # api_key query param — never reaches an INFO observer.
+    assert logging.getLogger("httpx").level >= logging.WARNING
+
+
+# --- _get_with_retry -------------------------------------------------------
+
+
+async def test_retry_helper_returns_first_2xx_without_sleep(_no_sleep):
+    client = _FakeClient(_resp(200, []))
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        async with httpx.AsyncClient() as _:  # type: ignore[unused-ignore]
+            pass  # just to ensure import side
+    # Direct helper call:
+    client = _FakeClient(_resp(200, []))
+    out = await _get_with_retry(client, "https://x", {"skip": "0"})  # type: ignore[arg-type]
+    assert out.status_code == 200
+    assert _no_sleep.await_count == 0  # first attempt has no preceding sleep
+
+
+async def test_retry_helper_retries_on_5xx_then_succeeds(_no_sleep):
+    client = _FakeClient(_resp(500), _resp(500), _resp(200, [{"x": 1}]))
+    out = await _get_with_retry(client, "https://x", {"skip": "0"})  # type: ignore[arg-type]
+    assert out.status_code == 200
+    # 2 retries → 2 sleeps (the first attempt has no preceding sleep).
+    assert _no_sleep.await_count == 2
+    assert len(client.calls) == 3
+
+
+async def test_retry_helper_retries_on_transport_error_then_succeeds(_no_sleep):
+    client = _FakeClient(
+        httpx.TimeoutException("timed out"),
+        _resp(200, []),
+    )
+    out = await _get_with_retry(client, "https://x", {"skip": "0"})  # type: ignore[arg-type]
+    assert out.status_code == 200
+    assert _no_sleep.await_count == 1
+
+
+async def test_retry_helper_exhausts_budget_and_returns_final_5xx(_no_sleep):
+    # 4 attempts allowed (initial + 3 retries). Send 4 × 500.
+    client = _FakeClient(_resp(500), _resp(500), _resp(500), _resp(500))
+    out = await _get_with_retry(client, "https://x", {"skip": "0"})  # type: ignore[arg-type]
+    assert out.status_code == 500
+    # 3 retries × 1 sleep each = 3 sleeps.
+    assert _no_sleep.await_count == 3
+    assert len(client.calls) == 4
+
+
+async def test_retry_helper_exhausts_budget_and_raises_final_exception(_no_sleep):
+    client = _FakeClient(
+        httpx.ConnectError("nope"),
+        httpx.ConnectError("nope"),
+        httpx.ConnectError("nope"),
+        httpx.ConnectError("nope"),
+    )
+    with pytest.raises(httpx.ConnectError):
+        await _get_with_retry(client, "https://x", {"skip": "0"})  # type: ignore[arg-type]
+
+
+async def test_retry_helper_does_not_retry_on_4xx(_no_sleep):
+    # 400 is NOT in the retryable set — return immediately.
+    client = _FakeClient(_resp(400))
+    out = await _get_with_retry(client, "https://x", {"skip": "0"})  # type: ignore[arg-type]
+    assert out.status_code == 400
+    assert _no_sleep.await_count == 0
+    assert len(client.calls) == 1
+
+
+async def test_retry_helper_does_not_retry_on_404(_no_sleep):
+    # 404 is openFDA's "no results" signal — must not retry; the caller
+    # interprets it as empty.
+    client = _FakeClient(_resp(404))
+    out = await _get_with_retry(client, "https://x", {"skip": "0"})  # type: ignore[arg-type]
+    assert out.status_code == 404
+    assert _no_sleep.await_count == 0
+
+
+# --- end-to-end: fetch + get_raw now use retry ----------------------------
+
+
+async def test_fetch_recovers_from_a_mid_ingest_500(_no_sleep):
+    """The 2026-05 incident: openFDA returns a 500 mid-paging. With retry,
+    fetch must recover and continue rather than crashing the whole ingest."""
+    full_page = [{"probe_id": str(i)} for i in range(100)]
+    second_partial = [{"probe_id": str(i)} for i in range(100, 130)]
+    # Sequence: page1 OK, page2 500 (transient), page2 retry OK.
+    client = _FakeClient(
+        _resp(200, full_page),
+        _resp(500),
+        _resp(200, second_partial),
+    )
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        out: list[dict] = []
+        async for raw in _Probe().fetch(since=None):
+            out.append(raw)
+    assert len(out) == 130
+    assert _no_sleep.await_count == 1  # one retry fired
+
+
+async def test_get_raw_recovers_from_a_transient_5xx(_no_sleep):
+    rec = {"probe_id": "P-1", "data": 42}
+    client = _FakeClient(_resp(500), _resp(200, [rec]))
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        out = await _Probe().get_raw("P-1")
+    assert out == rec
+    assert _no_sleep.await_count == 1

@@ -15,11 +15,24 @@ The base connector defines the ``DataSource`` Protocol surface generically:
 - ``get_raw`` does an exact ``search=<id_field>:"<doc_id>"`` lookup.
 - ``normalize`` is left abstract; each subclass maps its source's record
   shape to the canonical ``Document``.
+
+Reliability:
+- ``_get_with_retry`` transparently retries on transient errors —
+  ``httpx`` transport exceptions (``TimeoutException``, ``ConnectError``,
+  ``RemoteProtocolError``) AND HTTP 5xx responses. openFDA is a public free
+  API with no SLA; 500s mid-ingest are routine. Same retry budget as the
+  CT.gov client (3 attempts, 2/5/10s backoff). Mirrors PR #10's pattern.
+- ``api_key`` is sent as a query parameter (the only method openFDA
+  documents) but the default ``httpx`` INFO logger is downgraded so the
+  full request URL — which contains the secret — is never written to logs.
+  The connector emits its own per-page progress log with the URL redacted.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -32,10 +45,89 @@ from core.document import Document
 
 logger = logging.getLogger("servers.openfda_shared._base")
 
+# httpx's default INFO log line is `HTTP Request: GET <full URL>`. With an
+# ``api_key=`` query param on every request, that URL leaks the secret on
+# every page. Downgrade httpx's logger so its INFO lines never reach
+# observers — the connector still emits its own redacted per-page progress
+# line. WARNING+ from httpx (timeouts, retries fired from inside httpx) are
+# preserved.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 API_BASE_URL = "https://api.fda.gov"
 HTTP_TIMEOUT_SECONDS = 30.0
 _DEFAULT_PAGE_SIZE = 100
 _OPENFDA_MAX_SKIP = 25_000
+
+# Retry budget for transient errors (transport-level OR HTTP 5xx).
+# Identical shape to PR #10's ctgov retry: 3 attempts, growing backoff.
+_RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0, 10.0)
+_RETRYABLE_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.TimeoutException,
+    httpx.ConnectError,
+    httpx.RemoteProtocolError,
+    httpx.ReadError,
+)
+
+_API_KEY_QS_RE = re.compile(r"([?&])api_key=[^&]*")
+
+
+def _redact_url(url: str) -> str:
+    """Strip the ``api_key=...`` query param from any URL string.
+
+    Used in our own progress log lines so the secret never reaches a log
+    file. The leading separator is preserved as ``?`` / ``&`` so the URL
+    still parses if a reader pastes it; the value is replaced with
+    ``REDACTED`` rather than removed entirely so it's obvious a secret was
+    there.
+    """
+    return _API_KEY_QS_RE.sub(r"\1api_key=REDACTED", url)
+
+
+async def _get_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    params: dict[str, str],
+) -> httpx.Response:
+    """``client.get(url, params=params)`` with backoff on transient failures.
+
+    Retries on transport-level exceptions in ``_RETRYABLE_TRANSPORT_ERRORS``
+    AND on HTTP 5xx responses (openFDA is a free public API and returns
+    500s as transient signal — see the 2026-05 incident that prompted PR
+    #13). 404 is returned as-is — that's openFDA's "no results" signal.
+    Other 4xx are returned as-is so the caller can decide. After the retry
+    budget is exhausted the last response/exception is surfaced.
+    """
+    last_response: httpx.Response | None = None
+    last_error: BaseException | None = None
+    attempts = [0.0, *_RETRY_DELAYS]
+
+    for i, delay in enumerate(attempts):
+        if delay:
+            logger.warning(
+                "openFDA request retry %d/%d after %.0fs backoff (url=%s)",
+                i,
+                len(_RETRY_DELAYS),
+                delay,
+                _redact_url(url),
+            )
+            await asyncio.sleep(delay)
+        try:
+            resp = await client.get(url, params=params)
+        except _RETRYABLE_TRANSPORT_ERRORS as exc:
+            last_error = exc
+            continue
+        # 5xx — retryable. Anything else (2xx, 4xx including 404) — done.
+        if 500 <= resp.status_code < 600:
+            last_response = resp
+            continue
+        return resp
+
+    # Exhausted: surface whichever signal we last saw.
+    if last_response is not None:
+        return last_response
+    assert last_error is not None
+    raise last_error
+
 
 # Per plan §7 — disclaimers are non-optional for this server family.
 # Surfaced in every tool response from servers that consume openFDA data.
@@ -145,7 +237,9 @@ class OpenFDAConnectorBase(ABC):
 
         Stops at ``self._max_records`` if set, or at openFDA's ``skip=25_000``
         ceiling (larger corpora require switching to cursor paging — a v2
-        item per plan §5).
+        item per plan §5). Transient errors (transport + 5xx) retry with
+        backoff via ``_get_with_retry`` so a single openFDA blip doesn't
+        kill a multi-thousand-row run.
         """
         yielded = 0
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
@@ -161,7 +255,18 @@ class OpenFDAConnectorBase(ABC):
                 if search is not None:
                     params["search"] = search
 
-                resp = await client.get(self._endpoint_url, params=params)
+                # Per-page progress with the secret stripped. Replaces
+                # httpx's default INFO log (which we silenced — see
+                # module-level logging config).
+                logger.info(
+                    "openFDA fetch source=%s skip=%s limit=%s url=%s",
+                    self.source_id,
+                    skip,
+                    self._page_size,
+                    _redact_url(self._endpoint_url),
+                )
+
+                resp = await _get_with_retry(client, self._endpoint_url, params)
                 # 404 from openFDA = "no results" (their convention).
                 if resp.status_code == 404:
                     return
@@ -190,7 +295,7 @@ class OpenFDAConnectorBase(ABC):
         params["search"] = f'{self.id_field}:"{doc_id}"'
         params["limit"] = "1"
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-            resp = await client.get(self._endpoint_url, params=params)
+            resp = await _get_with_retry(client, self._endpoint_url, params)
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
