@@ -1,11 +1,12 @@
 # TODO — mcp-suite
 
-**Status (2026-05): Phases 1–4 + Phase A (suite refactor, merged) + Phase B (openFDA server, on `feat/openfda-server`) complete.**
+**Status (2026-05): Phases 1–4 + Phase A (PR #9, merged) + ctgov retry follow-up (PR #10, merged) + Phase B (PR #11, merged) complete. PR #12 in flight adds the cross-server `drug_context_for_trial`.**
 
 - Phases 1–4 shipped clinical-mcp v0.1 end-to-end.
 - Phase A merged in PR #9 — repo is now a shared-`core/` + per-vertical-`servers/<x>/` suite template.
 - PR #10 merged the ctgov retry+backoff follow-up after the live Phase-A validation hit a single curl timeout at ~84,600 ingested rows.
-- **Phase B** adds the openFDA server family — three `source_id`s (`openfda_label`, `openfda_event`, `openfda_enforcement`) sharing the canonical `documents` table, with a cross-source `summarize_safety_profile` custom tool that joins labels + FAERS + recalls in one Claude call. API schemas were verified via WebFetch against live `api.fda.gov` responses before any code was written. **127 tests, ruff + mypy clean.** Live small-sample backfill validation pending before merge.
+- **Phase B** merged in PR #11 — three openFDA `source_id`s (`openfda_label`, `openfda_event`, `openfda_enforcement`) sharing the canonical `documents` table, with a cross-source `summarize_safety_profile` custom tool that joins labels + FAERS + recalls in one Claude call. API schemas were verified via WebFetch against live `api.fda.gov` responses before any code was written. Validated on a 50-row-per-source sanity backfill.
+- **PR #12 (drug_context_for_trial)** — closes out plan §3 #5: lives on the clinical server, takes an NCT id, extracts interventions from the local clinical record, runs FTS lookups against the three openFDA corpora in one round-trip per drug. Pure SQL, no Voyage/Claude cost. Disclaimer baked in. **134 tests, ruff + mypy clean.**
 - **Phase C (landing page)** is the next strategic item — see [`docs/mcp-suite/03-pricing-and-positioning.md`](docs/mcp-suite/03-pricing-and-positioning.md).
 
 Phases 1–4 below are kept as the build record.
