@@ -4,7 +4,13 @@
 
 [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml)
 
-**Status:** the **clinical** server is shipped on the new `core/` + `servers/clinical/` template (3 generic tools + 1 custom; 79 tests; `ruff` + `mypy` clean; CI green). Adding a new vertical (`openfda`, `pubmed`, …) is now ~one day's work: write a `DataSource` connector + a `server.toml` + 0–N custom tools — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/).
+**Status:** the **clinical** and **openFDA** servers are shipped on the shared `core/` + per-vertical `servers/<x>/` template. The suite now covers:
+- **clinical** — ClinicalTrials.gov (3 generic tools + `summarize_eligibility`)
+- **openfda_label** — FDA drug labels (3 generic tools + `summarize_safety_profile` — synthesizes labels + FAERS + recalls for one drug)
+- **openfda_event** — FAERS adverse-event reports (3 generic tools)
+- **openfda_enforcement** — FDA drug recalls (3 generic tools)
+
+127 tests, `ruff` + `mypy` clean, CI green. Adding the next vertical (`pubmed`, `sec_edgar`, …) is now ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/).
 
 📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
@@ -14,16 +20,18 @@
 
 A Python [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) **suite** of servers over curated, embedded, continuously-refreshed life-sciences data. Each server (one per source / vertical) implements a single `DataSource` Protocol and gets the generic tools for free; verticals add their own LLM-backed custom tools.
 
-The **clinical** server is the first one shipped — it gives Claude Desktop four tools over the ClinicalTrials.gov public dataset:
+Each server exposes the same three **generic** tools (`semantic_search`, `find_similar`, `get_details`) over its own corpus — they're parameterized by `source_id` and come from `core/tools/` for free. Verticals add their own **custom** tools where the synthesis is unique:
 
-| Tool | Kind | What it does |
+| Server | Generic tools | Custom tools |
 |---|---|---|
-| `semantic_search` | generic | **Hybrid** search (pgvector cosine + Postgres full-text, fused via Reciprocal Rank Fusion) over the clinical corpus |
-| `find_similar` | generic | "More like this" — vector KNN from an ingested document's stored embedding |
-| `get_details` | generic | Fetches the full structured record for one document via the connector (live API for clinical) |
-| `summarize_eligibility` | clinical-custom | Converts dense inclusion/exclusion criteria into plain English via Claude |
+| **clinical** (ClinicalTrials.gov) | `semantic_search` · `find_similar` · `get_details` | `summarize_eligibility` — plain-English inclusion/exclusion at patient or clinician reading level |
+| **openfda_label** (FDA SPL drug labels) | same | `summarize_safety_profile` — **cross-source**: queries labels + FAERS + recalls for one drug, single Voyage embedding, one Claude call, baked-in FDA disclaimer |
+| **openfda_event** (FAERS adverse events) | same | — |
+| **openfda_enforcement** (FDA drug recalls) | same | — |
 
-> **Heads-up for upgraders:** the tool names changed in the Phase-A refactor. Old names (`search_trials`, `find_similar_trials`, `get_trial_details`) → new generic names (`semantic_search`, `find_similar`, `get_details`). `summarize_eligibility` is unchanged.
+`summarize_safety_profile` is the "cross-sell" tool that exists only because the suite exists — see [`docs/mcp-suite/02-openfda-server-plan.md`](docs/mcp-suite/02-openfda-server-plan.md) §3.
+
+> **Heads-up for upgraders:** the clinical tool names changed in the Phase-A refactor. Old names (`search_trials`, `find_similar_trials`, `get_trial_details`) → new generic names (`semantic_search`, `find_similar`, `get_details`). `summarize_eligibility` is unchanged.
 
 ## Why It Exists
 
@@ -165,6 +173,16 @@ uv run python -m core.ingest --source clinical --since 2026-01-01
 
 `scripts/ingest_trials.py` is now a thin compat shim that delegates to the generic runner with `--source clinical` — old muscle-memory commands keep working.
 
+For the openFDA family, ingest each source the same way (cap with `max_records` in the relevant `server.toml` for a sanity run):
+
+```bash
+uv run python -m core.ingest --source openfda_label
+uv run python -m core.ingest --source openfda_event
+uv run python -m core.ingest --source openfda_enforcement
+```
+
+The connector reads `OPENFDA_API_KEY` from `.env` (optional — anonymous allows 1k requests/day per IP; a free key lifts that to 120k/day). All four sources write to the same `documents` table under different `source_id`s, so `summarize_safety_profile` (on the openfda_label server) can join across them in one query.
+
 ### 6. Run the MCP server
 
 ```bash
@@ -193,17 +211,24 @@ into your Claude Desktop config and edit the absolute path:
     "clinical-trials": {
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/clinical-mcp",
-               "python", "-m", "clinical_trial_mcp.server"],
-      "env": { "UV_NATIVE_TLS": "1" }
+               "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "clinical" }
+    },
+    "fda-drugs": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/clinical-mcp",
+               "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "openfda_label" }
     }
   }
 }
 ```
 
-`--directory` makes `uv` use this project's venv and resolve its `.env`.
-`UV_NATIVE_TLS=1` is needed if you're behind a TLS-inspecting proxy (harmless
-otherwise). Postgres must be running and `.env` filled in. Restart Claude
-Desktop — the four tools appear in the tool picker.
+One MCP-server entry per `source_id` — `core.server` reads `MCP_SUITE_SOURCE` (default `clinical`) to pick which `servers/<id>/server.toml` to wire. Add more entries for `openfda_event` / `openfda_enforcement` if you want their generic tools too; the cross-source `summarize_safety_profile` lives on the `openfda_label` entry and queries all three openFDA corpora in one go.
+
+`--directory` makes `uv` use this project's venv and resolve its `.env`. `UV_NATIVE_TLS=1` is harmless off-proxy. Postgres must be running and `.env` filled in. Restart Claude Desktop fully (system tray quit) for new config to load.
+
+The legacy `python -m clinical_trial_mcp.server` entry point still works as a compat shim — it's equivalent to `core.server` with `MCP_SUITE_SOURCE=clinical`.
 
 ---
 
@@ -315,12 +340,24 @@ mcp-suite/
 │   ├── ingest.py                      # generic CLI: python -m core.ingest --source <id>
 │   └── server.py                      # FastMCP entry point — reads server.toml, registers tools
 │
-├── servers/                           # one subdir per vertical
-│   └── clinical/
-│       ├── connector.py               # CTGovConnector(DataSource) wrapping ctgov.py
-│       ├── ctgov.py                   # Akamai-safe curl_cffi client for CT.gov v2
-│       ├── tools.py                   # summarize_eligibility (clinical-specific LLM tool)
-│       └── server.toml                # source_id, embed_fields, generic + custom tool roster
+├── servers/                           # one subdir per source_id
+│   ├── clinical/                      # ClinicalTrials.gov
+│   │   ├── connector.py               # CTGovConnector(DataSource) wrapping ctgov.py
+│   │   ├── ctgov.py                   # Akamai-safe curl_cffi client (with retry+backoff)
+│   │   ├── tools.py                   # summarize_eligibility (clinical-specific LLM tool)
+│   │   └── server.toml                # source_id, embed_fields, generic + custom tool roster
+│   ├── openfda_shared/                # shared scaffolding for the 3 openFDA connectors
+│   │   └── _base.py                   # OpenFDAConnectorBase + httpx client + DISCLAIMER
+│   ├── openfda_label/                 # FDA SPL drug labels
+│   │   ├── connector.py               # OpenFDALabelConnector(DataSource)
+│   │   ├── tools.py                   # summarize_safety_profile (CROSS-SOURCE custom tool)
+│   │   └── server.toml
+│   ├── openfda_event/                 # FAERS adverse-event reports (generic tools only)
+│   │   ├── connector.py               # OpenFDAEventConnector(DataSource)
+│   │   └── server.toml
+│   └── openfda_enforcement/           # FDA drug recalls (generic tools only)
+│       ├── connector.py               # OpenFDAEnforcementConnector(DataSource)
+│       └── server.toml
 │
 ├── src/clinical_trial_mcp/            # Phase-A compat shims for old entry-point commands
 ├── scripts/ingest_trials.py           # compat shim → core.ingest --source clinical

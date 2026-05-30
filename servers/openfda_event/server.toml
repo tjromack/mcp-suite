@@ -1,0 +1,17 @@
+# openFDA — FAERS adverse-event server. Generic tools only; the headline
+# safety synthesizer lives on the LABEL server (drug name is the natural
+# entry point) and queries this corpus via shared pgvector.
+
+source_id    = "openfda_event"
+embed_fields = [
+    "patient.drug[].medicinalproduct",
+    "patient.reaction[].reactionmeddrapt",
+    "patient.drug[].drugindication",
+]
+
+generic_tools = ["semantic_search", "get_details", "find_similar"]
+custom_tools  = []
+
+[connector]
+page_size = 100
+# max_records = 50  # uncomment for capped ingest; omit for full scan

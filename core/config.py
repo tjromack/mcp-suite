@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     # Voyage AI — embeddings (Anthropic's recommended embedding partner).
     voyage_api_key: str = ""
+    # openFDA — optional. Empty = anonymous (1k requests/day per IP);
+    # set to lift the cap to 120k/day per key. Get one at
+    # https://open.fda.gov/apis/authentication/. Passed as the api_key
+    # query parameter by the openFDA connector base.
+    openfda_api_key: str = ""
 
     embedding_model: str = "voyage-3"
     summary_model: str = "claude-haiku-4-5-20251001"

@@ -13,12 +13,20 @@ embedded, continuously-refreshed authoritative data. Each server (one per
 data source / vertical) implements a single `DataSource` Protocol and gets
 the generic tools for free; verticals add their own LLM-backed custom tools.
 
-The **clinical** server exposes four tools — three generic, one custom:
+Two server families are shipped:
 
-1. **`semantic_search`** *(generic)* — hybrid search: fuses pgvector cosine ranking with Postgres full-text ranking via Reciprocal Rank Fusion over the `documents` table, scoped by `source_id="clinical"`
-2. **`find_similar`** *(generic)* — "more like this": vector KNN from an ingested document's stored embedding (no query embedding call)
-3. **`get_details`** *(generic)* — fetches the full structured record for one document via the connector's `get_raw(doc_id)` (for clinical: live ClinicalTrials.gov v2 fetch through `curl_cffi`, with TTL cache)
-4. **`summarize_eligibility`** *(clinical-custom)* — calls Claude (Anthropic API) to produce plain-language eligibility summaries from raw criteria text
+**clinical** server (`source_id="clinical"`) — ClinicalTrials.gov:
+1. **`semantic_search`** *(generic)* — hybrid search over the clinical corpus
+2. **`find_similar`** *(generic)* — vector KNN from a stored embedding
+3. **`get_details`** *(generic)* — live CT.gov v2 fetch via the curl_cffi-fronted connector, with TTL cache
+4. **`summarize_eligibility`** *(clinical-custom)* — Claude on raw eligibility criteria
+
+**openFDA** family — three `source_id`s sharing the canonical `documents` table:
+- `openfda_label` — FDA SPL drug labels (3 generic + `summarize_safety_profile` custom)
+- `openfda_event` — FAERS adverse-event reports (3 generic only)
+- `openfda_enforcement` — FDA drug recalls (3 generic only)
+
+`summarize_safety_profile` is **cross-source**: given a drug name it runs one Voyage query embedding, three pgvector searches (one per openFDA `source_id`), and one Claude call to synthesize a balanced label-warnings + FAERS-signals + recalls profile. The openFDA disclaimer (research-use-only, FAERS unverified, not for clinical decisions) is appended to every response from this server family.
 
 This is a portfolio project demonstrating: MCP server authoring, pgvector
 semantic search against real NLP-heavy data, LLM-assisted text processing,

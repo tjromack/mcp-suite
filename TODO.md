@@ -1,10 +1,12 @@
 # TODO — mcp-suite
 
-**Status (2026-05): Phases 1–4 complete + Phase A (suite refactor) complete on `refactor/mcp-suite-template`.**
+**Status (2026-05): Phases 1–4 + Phase A (suite refactor, merged) + Phase B (openFDA server, on `feat/openfda-server`) complete.**
 
-- Phases 1–4 shipped clinical-mcp v0.1 end-to-end (4 tools, 600+ trials, 61 tests, CI green, MIT, v0.1.0 released).
-- Phase A refactored the single-server repo into the **shared-`core/` + per-vertical-`servers/<x>/`** suite template — see [`elegant-chasing-glade.md`](elegant-chasing-glade.md) and the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/). 11 commits, 79 tests, `ruff` + `mypy` clean.
-- **Phase B (openFDA server)** and **Phase C (landing page)** are the next strategic items — defined in [`docs/mcp-suite/02-openfda-server-plan.md`](docs/mcp-suite/02-openfda-server-plan.md) and [`docs/mcp-suite/03-pricing-and-positioning.md`](docs/mcp-suite/03-pricing-and-positioning.md) respectively.
+- Phases 1–4 shipped clinical-mcp v0.1 end-to-end.
+- Phase A merged in PR #9 — repo is now a shared-`core/` + per-vertical-`servers/<x>/` suite template.
+- PR #10 merged the ctgov retry+backoff follow-up after the live Phase-A validation hit a single curl timeout at ~84,600 ingested rows.
+- **Phase B** adds the openFDA server family — three `source_id`s (`openfda_label`, `openfda_event`, `openfda_enforcement`) sharing the canonical `documents` table, with a cross-source `summarize_safety_profile` custom tool that joins labels + FAERS + recalls in one Claude call. API schemas were verified via WebFetch against live `api.fda.gov` responses before any code was written. **127 tests, ruff + mypy clean.** Live small-sample backfill validation pending before merge.
+- **Phase C (landing page)** is the next strategic item — see [`docs/mcp-suite/03-pricing-and-positioning.md`](docs/mcp-suite/03-pricing-and-positioning.md).
 
 Phases 1–4 below are kept as the build record.
 
