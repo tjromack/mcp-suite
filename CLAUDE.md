@@ -21,12 +21,19 @@ Two server families are shipped:
 3. **`get_details`** *(generic)* — live CT.gov v2 fetch via the curl_cffi-fronted connector, with TTL cache
 4. **`summarize_eligibility`** *(clinical-custom)* — Claude on raw eligibility criteria
 
-**openFDA** family — three `source_id`s sharing the canonical `documents` table:
+**openFDA** family — four `source_id`s sharing the canonical `documents` table:
 - `openfda_label` — FDA SPL drug labels (3 generic + `summarize_safety_profile` custom)
 - `openfda_event` — FAERS adverse-event reports (3 generic only)
 - `openfda_enforcement` — FDA drug recalls (3 generic only)
+- `openfda_drugsfda` — FDA Drugs@FDA approval history (3 generic only); its approval/marketing status is surfaced via the clinical `drug_context_for_trial` cross-source join
 
 `summarize_safety_profile` is **cross-source**: given a drug name it runs one Voyage query embedding, three pgvector searches (one per openFDA `source_id`), and one Claude call to synthesize a balanced label-warnings + FAERS-signals + recalls profile. The openFDA disclaimer (research-use-only, FAERS unverified, not for clinical decisions) is appended to every response from this server family.
+
+**pubmed** server (`source_id="pubmed"`) — PubMed biomedical literature via NCBI E-utilities (esearch→efetch, stdlib XML parsing, no new dependency): 3 generic tools + `summarize_evidence` (cited synthesis over the local abstract corpus — every claim cites a retrieved PMID; not-medical-advice disclaimer). The clinical server's `evidence_for_trial` is **cross-source**: it queries the `pubmed` corpus for literature related to a trial's conditions + interventions. Plan: `docs/mcp-suite/04-pubmed-server-plan.md`.
+
+**Build posture (2026-06): portfolio-first** — the strategy docs' validation gate (don't build servers #3–4 until a paying customer exists) is relaxed; servers are treated as engineering milestones demonstrating the suite thesis. The live roadmap is in `TODO.md` (full plan + ordering in `docs/mcp-suite/05-roadmap.md`); commercial validation (landing page + customer conversations) remains a later phase.
+
+**Cross-cutting infra:** `core/refresh.py` (Phase F) runs watermark-driven incremental refresh per source (`--source`/`--all`/`--due`/`--full`), tracking state in the `source_state` table and reading each server.toml's `[refresh] cadence`. `core/metering.py` (Phase G) records one `tool_calls` row per MCP tool invocation (best-effort, never breaks a tool); every server exposes a `corpus_status` diagnostic (`core/tools/corpus_status.py`) reporting per-source size/freshness + 7-day usage. `mcp_platform/` (Phase H) is the authorization gate: `gate.authorize()` enforces API-key tiers (free/pro/suite/enterprise) — monthly call cap (from the `tool_calls` meter) + cross-server-tool gating — and `keys.py` is the issue/list/revoke CLI (hashed storage). Off by default (`AUTH_ENABLED=false`). In `core/server.py`, **every** tool routes through `_serve(tool_name, factory)` (gate → meter); custom tools are wrapped by `_register_custom` (signature-preserving for FastMCP schema inference). The key is presented per-process via `MCP_SUITE_API_KEY`.
 
 This is a portfolio project demonstrating: MCP server authoring, pgvector
 semantic search against real NLP-heavy data, LLM-assisted text processing,
@@ -184,20 +191,24 @@ uv sync
 # Start Postgres with pgvector
 docker compose up -d
 
-# Apply schema
-uv run psql $DATABASE_URL -f src/clinical_trial_mcp/db/schema.sql
+# Apply schema (generic documents table + source_state)
+uv run psql $DATABASE_URL -f core/store/schema.sql
 
-# Ingest trials (default: 500 trials matching 'cancer')
-uv run python scripts/ingest_trials.py --query cancer --max 500
+# Ingest a source (generic runner; reads servers/<id>/server.toml)
+uv run python -m core.ingest --source clinical
+uv run python -m core.ingest --source pubmed
 
-# Run the MCP server (stdio transport for Claude Desktop)
-uv run python -m clinical_trial_mcp.server
+# Refresh incrementally (Phase F — watermark-driven; --due honors cadence)
+uv run python -m core.refresh --due
+
+# Run an MCP server (stdio; one source per process via MCP_SUITE_SOURCE)
+MCP_SUITE_SOURCE=clinical uv run python -m core.server
 
 # Run tests
 uv run pytest tests/ -v
 
-# Lint
-uv run ruff check . && uv run ruff format --check .
+# Lint + type-check
+uv run ruff check . && uv run ruff format --check . && uv run mypy core servers
 ```
 
 ---

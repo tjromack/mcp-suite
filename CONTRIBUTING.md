@@ -5,16 +5,30 @@
 ```bash
 uv sync                 # installs deps + the [dependency-groups] dev tools
 docker compose up -d    # Postgres + pgvector
-# Windows behind a TLS-intercepting proxy: use `uv sync --native-tls`
-# (or set UV_NATIVE_TLS=1). See the proxy notes in README.
 ```
 
-Run the checks before opening a PR:
+> **Behind a corporate/AV TLS-inspecting proxy?** `uv` uses its own bundled
+> CA store, so *every* `uv` command that touches the network or rebuilds the
+> package (`uv sync` **and** `uv run`) fails with `invalid peer certificate:
+> UnknownIssuer`. Fix it once for the whole shell session:
+>
+> ```bash
+> export UV_NATIVE_TLS=1   # PowerShell: $env:UV_NATIVE_TLS = "1"
+> ```
+>
+> `--native-tls` is the per-command equivalent. Off-proxy it's a harmless
+> no-op. As a last resort you can run the suite's own venv directly
+> (`.venv/Scripts/python.exe -m pytest tests/`), which bypasses `uv`'s
+> resolver entirely.
+
+Run the checks before opening a PR (with `UV_NATIVE_TLS=1` exported if you're
+behind such a proxy):
 
 ```bash
 uv run pytest tests/ -v
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy core servers
 ```
 
 ## Project conventions

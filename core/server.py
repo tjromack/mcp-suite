@@ -15,11 +15,13 @@ MCP-visible parameters and obtain the DB pool via ``get_pool()`` internally
 
 from __future__ import annotations
 
+import functools
 import importlib
+import inspect
 import logging
 import os
 import tomllib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
@@ -30,10 +32,13 @@ from pydantic import Field
 
 from core.config import settings
 from core.ingest import load_connector
+from core.metering import metered_call, record_tool_call
 from core.store.connection import close_pool, get_pool, init_pool
+from core.tools.corpus_status import corpus_status as _corpus_status
 from core.tools.find_similar import find_similar as _find_similar
 from core.tools.get_details import get_details as _get_details
 from core.tools.semantic_search import semantic_search as _semantic_search
+from mcp_platform.gate import authorize
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +47,10 @@ logging.basicConfig(
 logger = logging.getLogger("core.server")
 
 SOURCE_ID = os.environ.get("MCP_SUITE_SOURCE", "clinical")
+# Phase H — the API key this process presents to the authorization gate. Like
+# MCP_SUITE_SOURCE, it's per-process for the stdio transport. Only consulted
+# when AUTH_ENABLED=true (otherwise the gate allows everything).
+API_KEY = os.environ.get("MCP_SUITE_API_KEY")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -86,6 +95,40 @@ async def _lifespan(_server: FastMCP) -> AsyncIterator[None]:
 mcp = FastMCP(f"mcp-suite:{SOURCE_ID}", lifespan=_lifespan)
 
 
+# --- authorization + metering choke point ----------------------------------
+# Every tool routes through _serve: it consults the gate (no-op when auth is
+# off), and on allow runs the call through metered_call (recording the call +
+# attributing it to the key). On deny it records a 'denied' row and returns a
+# clean TextContent — never raises. `factory` defers building the coroutine so
+# the underlying work is never started for a denied call.
+
+
+async def _serve(
+    tool_name: str,
+    factory: Callable[[], Awaitable[list[TextContent]]],
+) -> list[TextContent]:
+    decision = await authorize(get_pool(), API_KEY, SOURCE_ID, tool_name)
+    if not decision.allowed:
+        logger.info("tool=%s source=%s DENIED (%s)", tool_name, SOURCE_ID, decision.reason)
+        await record_tool_call(
+            SOURCE_ID, tool_name, "denied", 0, 0, decision.reason, decision.key_hash
+        )
+        return [TextContent(type="text", text=f"Access denied: {decision.message}")]
+    return await metered_call(SOURCE_ID, tool_name, factory(), api_key_hash=decision.key_hash)
+
+
+def _register_custom(name: str, fn: Callable[..., Awaitable[list[TextContent]]]) -> Callable:
+    """Wrap a custom tool so it routes through _serve (gate + metering),
+    preserving its signature for FastMCP schema inference."""
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> list[TextContent]:
+        return await _serve(name, lambda: fn(*args, **kwargs))
+
+    wrapper.__signature__ = inspect.signature(fn)  # type: ignore[attr-defined]
+    return wrapper
+
+
 # --- Generic tools (registered only if declared in server.toml) ------------
 
 if "semantic_search" in _generic:
@@ -112,7 +155,10 @@ if "semantic_search" in _generic:
             top_k,
             offset,
         )
-        return await _semantic_search(get_pool(), SOURCE_ID, query, top_k, offset)
+        return await _serve(
+            "semantic_search",
+            lambda: _semantic_search(get_pool(), SOURCE_ID, query, top_k, offset),
+        )
 
 
 if "find_similar" in _generic:
@@ -132,7 +178,9 @@ if "find_similar" in _generic:
     ) -> list[TextContent]:
         """Vector KNN from a reference document's stored embedding."""
         logger.info("tool=find_similar source=%s doc_id=%r top_k=%s", SOURCE_ID, doc_id, top_k)
-        return await _find_similar(get_pool(), SOURCE_ID, doc_id, top_k)
+        return await _serve(
+            "find_similar", lambda: _find_similar(get_pool(), SOURCE_ID, doc_id, top_k)
+        )
 
 
 if "get_details" in _generic:
@@ -151,7 +199,26 @@ if "get_details" in _generic:
     ) -> list[TextContent]:
         """Fetch the full structured record for one document via the connector."""
         logger.info("tool=get_details source=%s doc_id=%r", SOURCE_ID, doc_id)
-        return await _get_details(_connector, doc_id)
+        return await _serve("get_details", lambda: _get_details(_connector, doc_id))
+
+
+# --- corpus_status (Phase G) — always registered on every server -----------
+# A whole-suite health/diagnostic: per-source doc counts, freshness from
+# source_state, and a 7-day tool-call summary from the metering table. Not
+# gated by server.toml because it's a universal observability endpoint.
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Corpus status",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,  # local store only
+    )
+)
+async def corpus_status() -> list[TextContent]:
+    """Suite-wide corpus size, freshness, and 7-day tool-usage diagnostic."""
+    logger.info("tool=corpus_status source=%s", SOURCE_ID)
+    return await _serve("corpus_status", lambda: _corpus_status(get_pool()))
 
 
 # --- Custom tools (loaded from servers/<source_id>/tools.py) ---------------
@@ -169,7 +236,9 @@ if _custom:
             )
         # Treat custom tools as read-only by default; vertical authors can
         # add explicit annotations on the function itself via @mcp.tool in
-        # the future if they need finer control.
+        # the future if they need finer control. _register_custom routes the
+        # call through the gate + meter while preserving the function signature
+        # so FastMCP still infers the input schema.
         mcp.tool(
             annotations=ToolAnnotations(
                 title=_name.replace("_", " ").capitalize(),
@@ -178,7 +247,7 @@ if _custom:
                 idempotentHint=False,  # custom tools often LLM-backed
                 openWorldHint=True,
             )
-        )(_fn)
+        )(_register_custom(_name, _fn))
 
 
 def main() -> None:

@@ -3,6 +3,14 @@
 **Purpose:** a positioning + pricing skeleton you can stand up as a landing page *now*, to
 test whether the life-sciences buyer will pay — before building servers #3–4.
 
+> **Build-posture update (2026-06): portfolio-first.** This doc's discipline — "find the
+> customer at server #2, don't build #5 in search of one" — is the right *commercial*
+> sequencing. For the portfolio build-out, that gate is intentionally **relaxed**: servers
+> are built as engineering milestones that demonstrate the suite thesis, and the
+> validation track below (landing page + 5 conversations + metering) is deferred to
+> **Phase G** (see [TODO.md](../../TODO.md)). The pricing/positioning here is unchanged and
+> still applies the moment monetization starts.
+
 ---
 
 ## 1. Positioning thesis

@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     # https://open.fda.gov/apis/authentication/. Passed as the api_key
     # query parameter by the openFDA connector base.
     openfda_api_key: str = ""
+    # NCBI E-utilities (PubMed connector) — all optional. An API key lifts
+    # the rate cap from 3 req/s to 10 req/s (get one at
+    # https://www.ncbi.nlm.nih.gov/account/). `tool` and `email` are the
+    # identification NCBI asks every E-utilities client to send so they can
+    # contact you before throttling — they are not secrets.
+    ncbi_api_key: str = ""
+    ncbi_tool: str = "mcp-suite"
+    ncbi_email: str = ""
 
     embedding_model: str = "voyage-3"
     summary_model: str = "claude-haiku-4-5-20251001"
@@ -49,6 +57,12 @@ class Settings(BaseSettings):
     # change rarely; this avoids re-hitting the Akamai-fronted API for repeat
     # lookups of the same NCT ID within a session. 0 disables caching.
     ctgov_cache_ttl_seconds: int = 3600
+
+    # Phase H — authorization. When false (default) every tool runs ungated,
+    # which is correct for local/stdio dev. When true, each tool call is
+    # checked by mcp_platform.gate against the API key in MCP_SUITE_API_KEY:
+    # tier monthly-call cap + cross-server-tool gating. Maps to env AUTH_ENABLED.
+    auth_enabled: bool = False
 
 
 settings = Settings()

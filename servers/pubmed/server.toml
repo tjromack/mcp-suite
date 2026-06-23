@@ -1,0 +1,28 @@
+# PubMed — biomedical literature server (NCBI E-utilities).
+# Consumed by core/server.py when MCP_SUITE_SOURCE=pubmed and by
+# core/ingest.py when invoked with --source pubmed.
+
+source_id    = "pubmed"
+embed_fields = ["title", "abstract", "mesh_terms", "keywords"]
+
+# Generic tools come from core/tools/ — zero per-vertical code.
+generic_tools = ["semantic_search", "get_details", "find_similar"]
+
+# Custom tool: cited evidence synthesizer over the local pubmed corpus.
+# Lives in servers/pubmed/tools.py.
+custom_tools = ["summarize_evidence"]
+
+# Refresh cadence read by core/refresh.py --due. PubMed indexing isn't real-time.
+[refresh]
+cadence = "weekly"
+
+[connector]
+# `term` is the PubMed query that scopes the backfill (PubMed search syntax,
+# e.g. 'osimertinib AND lung cancer' or '"EGFR"[MeSH]'). Required for a
+# bounded ingest — there is no "scan all of PubMed" default.
+term = "cancer immunotherapy"
+# page_size is esearch retmax / efetch batch (max 200). 100 is polite.
+page_size = 100
+# max_records caps the fetch (omit for the full query result set, subject to
+# the History-server window ceiling — see the connector docstring).
+# max_records = 50  # uncomment for capped sanity runs

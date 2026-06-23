@@ -12,6 +12,10 @@ embed_fields = [
 generic_tools = ["semantic_search", "get_details", "find_similar"]
 custom_tools  = []
 
+# Refresh cadence read by core/refresh.py --due. FAERS reports flow in daily.
+[refresh]
+cadence = "daily"
+
 [connector]
 page_size = 100
 # max_records = 50  # uncomment for capped ingest; omit for full scan

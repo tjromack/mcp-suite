@@ -4,13 +4,15 @@
 
 [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml)
 
-**Status:** the **clinical** and **openFDA** servers are shipped on the shared `core/` + per-vertical `servers/<x>/` template. The suite now covers:
-- **clinical** — ClinicalTrials.gov (3 generic tools + `summarize_eligibility` + `drug_context_for_trial` — joins a trial's interventions against the local openFDA corpora)
+**Status:** the **clinical**, **openFDA** (4 sources), and **PubMed** servers are shipped on the shared `core/` + per-vertical `servers/<x>/` template. The suite now covers:
+- **clinical** — ClinicalTrials.gov (3 generic tools + `summarize_eligibility` + `drug_context_for_trial` + `evidence_for_trial`)
 - **openfda_label** — FDA drug labels (3 generic tools + `summarize_safety_profile` — synthesizes labels + FAERS + recalls for one drug)
 - **openfda_event** — FAERS adverse-event reports (3 generic tools)
 - **openfda_enforcement** — FDA drug recalls (3 generic tools)
+- **openfda_drugsfda** — FDA Drugs@FDA approval history (3 generic tools)
+- **pubmed** — PubMed biomedical literature (3 generic tools + `summarize_evidence` — cited synthesis over abstracts)
 
-134 tests, `ruff` + `mypy` clean, CI green. Adding the next vertical (`pubmed`, `sec_edgar`, …) is now ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/).
+217 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
 
 📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
@@ -24,12 +26,14 @@ Each server exposes the same three **generic** tools (`semantic_search`, `find_s
 
 | Server | Generic tools | Custom tools |
 |---|---|---|
-| **clinical** (ClinicalTrials.gov) | `semantic_search` · `find_similar` · `get_details` | `summarize_eligibility` — plain-English inclusion/exclusion at patient or clinician reading level<br>`drug_context_for_trial` — **cross-source SQL join**: extracts an NCT's interventions and surfaces their openFDA label / FAERS / recall context |
+| **clinical** (ClinicalTrials.gov) | `semantic_search` · `find_similar` · `get_details` | `summarize_eligibility` — plain-English inclusion/exclusion at patient or clinician reading level<br>`drug_context_for_trial` — **cross-source SQL join**: extracts an NCT's interventions and surfaces their openFDA approval / label / FAERS / recall context<br>`evidence_for_trial` — **cross-source**: surfaces PubMed literature related to a trial's conditions + interventions |
 | **openfda_label** (FDA SPL drug labels) | same | `summarize_safety_profile` — **cross-source**: queries labels + FAERS + recalls for one drug, single Voyage embedding, one Claude call, baked-in FDA disclaimer |
 | **openfda_event** (FAERS adverse events) | same | — |
 | **openfda_enforcement** (FDA drug recalls) | same | — |
+| **openfda_drugsfda** (FDA Drugs@FDA approvals) | same | — (its approval data is surfaced via the clinical `drug_context_for_trial` join) |
+| **pubmed** (PubMed literature) | same | `summarize_evidence` — cited synthesis over the local abstract corpus; every claim cites a retrieved PMID, not-medical-advice disclaimer |
 
-`summarize_safety_profile` is the "cross-sell" tool that exists only because the suite exists — see [`docs/mcp-suite/02-openfda-server-plan.md`](docs/mcp-suite/02-openfda-server-plan.md) §3.
+The cross-source tools (`drug_context_for_trial`, `summarize_safety_profile`, `evidence_for_trial`) are the "cross-sell" tools that exist only because the suite exists — see [`docs/mcp-suite/02-openfda-server-plan.md`](docs/mcp-suite/02-openfda-server-plan.md) §3 and [`04-pubmed-server-plan.md`](docs/mcp-suite/04-pubmed-server-plan.md) §3.
 
 > **Heads-up for upgraders:** the clinical tool names changed in the Phase-A refactor. Old names (`search_trials`, `find_similar_trials`, `get_trial_details`) → new generic names (`semantic_search`, `find_similar`, `get_details`). `summarize_eligibility` is unchanged.
 
@@ -131,8 +135,11 @@ cd clinical-mcp
 uv sync
 ```
 
-> **Behind a corporate/AV TLS-inspecting proxy?** Use `uv sync --native-tls`
-> (or set `UV_NATIVE_TLS=1`). See [Troubleshooting](#troubleshooting).
+> **Behind a corporate/AV TLS-inspecting proxy?** `uv` bundles its own CA
+> store, so *every* `uv` command (`uv sync` **and** `uv run …`) fails with
+> `invalid peer certificate: UnknownIssuer`. Set `UV_NATIVE_TLS=1` once for
+> the session (PowerShell: `$env:UV_NATIVE_TLS = "1"`) — it covers all `uv`
+> commands and is a harmless no-op off-proxy. See [Troubleshooting](#troubleshooting).
 
 ### 2. Configure environment
 
@@ -179,9 +186,57 @@ For the openFDA family, ingest each source the same way (cap with `max_records` 
 uv run python -m core.ingest --source openfda_label
 uv run python -m core.ingest --source openfda_event
 uv run python -m core.ingest --source openfda_enforcement
+uv run python -m core.ingest --source openfda_drugsfda
+# PubMed — scope the corpus via the `term` in servers/pubmed/server.toml:
+uv run python -m core.ingest --source pubmed
 ```
 
-The connector reads `OPENFDA_API_KEY` from `.env` (optional — anonymous allows 1k requests/day per IP; a free key lifts that to 120k/day). All four sources write to the same `documents` table under different `source_id`s, so `summarize_safety_profile` (on the openfda_label server) can join across them in one query.
+The connector reads `OPENFDA_API_KEY` from `.env` (optional — anonymous allows 1k requests/day per IP; a free key lifts that to 120k/day). All four openFDA sources write to the same `documents` table under different `source_id`s, so `summarize_safety_profile` (on the openfda_label server) can join across them in one query.
+
+### 5b. Keep it fresh — incremental refresh (Phase F)
+
+`core.refresh` is the orchestrator that makes the "continuously refreshed" claim real. It tracks a per-source watermark in the `source_state` table and runs each connector's incremental `fetch(since)` — advancing the watermark only on success, so a failed run retries its window rather than skipping data.
+
+```bash
+uv run python -m core.refresh --source pubmed   # one source, incremental
+uv run python -m core.refresh --all             # every source, incremental
+uv run python -m core.refresh --due             # only sources past their cadence (scheduler mode)
+uv run python -m core.refresh --full --source openfda_event   # ignore watermark, full re-backfill
+```
+
+Each `servers/<id>/server.toml` declares a `[refresh] cadence` (`daily` for FAERS, `weekly` for the rest); `--due` honors it. [`.github/workflows/refresh.yml`](.github/workflows/refresh.yml) is an example cron scheduler that runs `--due` daily against a hosted DB. Check staleness any time with `SELECT source_id, last_success_at, last_status, last_doc_count FROM source_state;`.
+
+### 5c. Observability — metering + `corpus_status` (Phase G)
+
+Every tool call (generic and custom, on every server) is metered: one row in the `tool_calls` table with the source, tool, latency, response size, and outcome. Metering is best-effort — a failed insert is logged and swallowed, never breaking a tool response. This is the usage substrate the pricing model needs ("you can't price what you don't measure").
+
+Every server also exposes a `corpus_status` tool — a whole-suite health view: per-source document counts, freshness (newest record + last-refresh age + status from `source_state`), and a 7-day tool-usage summary from the meter. Call it from any MCP client, or query directly:
+
+```sql
+SELECT tool_name, count(*), avg(duration_ms)::int AS avg_ms
+FROM tool_calls WHERE created_at > now() - interval '7 days'
+GROUP BY tool_name ORDER BY 2 DESC;
+```
+
+### 5d. Authorization — API keys + tiers (Phase H)
+
+An optional in-process authorization gate ([`mcp_platform/`](mcp_platform/)). Off by default (`AUTH_ENABLED=false`) so local/stdio dev is ungated. When on, every tool call is checked against the key in `MCP_SUITE_API_KEY`: tier monthly-call cap + cross-server-tool gating, reading the Phase-G meter as the usage ledger. Keys are stored as a sha256 hash only (raw key shown once).
+
+| Tier | Monthly calls | Cross-server tools |
+|---|---|---|
+| free | 50 | ✗ |
+| pro | 2,500 | ✗ |
+| suite | 15,000 | ✓ (`drug_context_for_trial`, `evidence_for_trial`, `summarize_safety_profile`) |
+| enterprise | unlimited | ✓ |
+
+```bash
+uv run python -m mcp_platform.keys issue --tier suite --label "alice@acme"   # prints the key once
+uv run python -m mcp_platform.keys list
+# Run a server with gating on:
+AUTH_ENABLED=true MCP_SUITE_API_KEY=mcps_... MCP_SUITE_SOURCE=clinical uv run python -m core.server
+```
+
+Denied calls return a clean `Access denied: …` message (never an exception) and are recorded with status `denied`. `corpus_status` is exempt (never gated). The same `authorize()` gate would sit behind an HTTP gateway later — see [`mcp_platform/README.md`](mcp_platform/README.md).
 
 ### 6. Run the MCP server
 
@@ -219,12 +274,18 @@ into your Claude Desktop config and edit the absolute path:
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/clinical-mcp",
                "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "openfda_label" }
+    },
+    "pubmed": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/clinical-mcp",
+               "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "pubmed" }
     }
   }
 }
 ```
 
-One MCP-server entry per `source_id` — `core.server` reads `MCP_SUITE_SOURCE` (default `clinical`) to pick which `servers/<id>/server.toml` to wire. Add more entries for `openfda_event` / `openfda_enforcement` if you want their generic tools too; the cross-source `summarize_safety_profile` lives on the `openfda_label` entry and queries all three openFDA corpora in one go.
+One MCP-server entry per `source_id` — `core.server` reads `MCP_SUITE_SOURCE` (default `clinical`) to pick which `servers/<id>/server.toml` to wire. Add more entries for `openfda_event` / `openfda_enforcement` / `openfda_drugsfda` if you want their generic tools too; the cross-source `summarize_safety_profile` lives on the `openfda_label` entry and queries the openFDA corpora in one go. The `pubmed` entry adds literature search + the cited `summarize_evidence` synthesizer; the clinical entry's `drug_context_for_trial` joins a trial's drugs to their FDA approval/label/FAERS/recall context, and `evidence_for_trial` joins to related PubMed literature.
 
 `--directory` makes `uv` use this project's venv and resolve its `.env`. `UV_NATIVE_TLS=1` is harmless off-proxy. Postgres must be running and `.env` filled in. Restart Claude Desktop fully (system tray quit) for new config to load.
 
@@ -355,8 +416,15 @@ mcp-suite/
 │   ├── openfda_event/                 # FAERS adverse-event reports (generic tools only)
 │   │   ├── connector.py               # OpenFDAEventConnector(DataSource)
 │   │   └── server.toml
-│   └── openfda_enforcement/           # FDA drug recalls (generic tools only)
-│       ├── connector.py               # OpenFDAEnforcementConnector(DataSource)
+│   ├── openfda_enforcement/           # FDA drug recalls (generic tools only)
+│   │   ├── connector.py               # OpenFDAEnforcementConnector(DataSource)
+│   │   └── server.toml
+│   ├── openfda_drugsfda/              # FDA Drugs@FDA approval history (generic tools only)
+│   │   ├── connector.py               # OpenFDADrugsFDAConnector(OpenFDAConnectorBase)
+│   │   └── server.toml
+│   └── pubmed/                        # PubMed biomedical literature (NCBI E-utilities)
+│       ├── connector.py               # PubMedConnector(DataSource) — esearch→efetch, stdlib XML
+│       ├── tools.py                   # summarize_evidence (cited literature synthesizer)
 │       └── server.toml
 │
 ├── src/clinical_trial_mcp/            # Phase-A compat shims for old entry-point commands

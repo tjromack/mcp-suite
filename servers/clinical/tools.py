@@ -26,7 +26,9 @@ from mcp.types import TextContent
 
 from core.config import settings
 from core.store.connection import get_pool
+from core.tools.semantic_search import query_documents
 from servers.openfda_shared._base import DISCLAIMER
+from servers.pubmed.tools import DISCLAIMER as PUBMED_DISCLAIMER
 
 logger = logging.getLogger("servers.clinical.tools")
 
@@ -210,6 +212,17 @@ def _format_recall_match(r: Record) -> str:
     )
 
 
+def _format_approval_match(r: Record) -> str:
+    s = r["structured"] or {}
+    approved = "APPROVED" if s.get("is_approved") else "not approved / unknown"
+    statuses = ", ".join(s.get("marketing_statuses") or []) or "?"
+    return (
+        f"  - [{r['doc_id']}] {s.get('application_type', '?')}  {approved}\n"
+        f"    sponsor: {s.get('sponsor_name', '?')}  marketing: {statuses}\n"
+        f"    latest submission: {s.get('latest_submission_status_date', '?')}\n    url: {r['url']}"
+    )
+
+
 def _format_block(label: str, rows: list[Record], formatter) -> str:
     if not rows:
         return f"  {label}: (no matches in local corpus)\n"
@@ -225,10 +238,11 @@ async def drug_context_for_trial(
 
     Looks up ``nct_id`` in the local clinical corpus, extracts the structured
     ``interventions`` list (drug names from CT.gov's ``armsInterventionsModule``),
-    and for each drug runs a Postgres full-text-search match against the three
-    openFDA ``source_id``s (``openfda_label``, ``openfda_event``,
-    ``openfda_enforcement``) in the same ``documents`` table. Capped at
-    ``_MAX_INTERVENTIONS`` drugs and ``top_k_per_source`` matches per source.
+    and for each drug runs a Postgres full-text-search match against the four
+    openFDA ``source_id``s (``openfda_drugsfda``, ``openfda_label``,
+    ``openfda_event``, ``openfda_enforcement``) in the same ``documents`` table.
+    Capped at ``_MAX_INTERVENTIONS`` drugs and ``top_k_per_source`` matches per
+    source.
 
     Returns a structured cross-source report. The openFDA DISCLAIMER is
     appended per plan §7. Errors are returned as TextContent, never raised
@@ -287,6 +301,11 @@ async def drug_context_for_trial(
             lines.append("")
 
             for drug in shown:
+                # Fetch order matches display order (approvals first) and the
+                # canonical source order asserted in the tests.
+                approvals = await conn.fetch(
+                    _FDA_FTS_SQL, "openfda_drugsfda", drug, top_k_per_source
+                )
                 labels = await conn.fetch(_FDA_FTS_SQL, "openfda_label", drug, top_k_per_source)
                 events = await conn.fetch(_FDA_FTS_SQL, "openfda_event", drug, top_k_per_source)
                 recalls = await conn.fetch(
@@ -294,6 +313,9 @@ async def drug_context_for_trial(
                 )
 
                 lines.append(f"=== {drug} ===")
+                lines.append(
+                    _format_block("APPROVALS (drug/drugsfda)", approvals, _format_approval_match)
+                )
                 lines.append(_format_block("LABELS (drug/label)", labels, _format_label_match))
                 lines.append(
                     _format_block(
@@ -314,6 +336,122 @@ async def drug_context_for_trial(
                 text=(
                     f"Error running drug_context_for_trial: {type(exc).__name__}: {exc}\n\n"
                     f"{DISCLAIMER}"
+                ),
+            )
+        ]
+
+
+# --- evidence_for_trial ----------------------------------------------------
+#
+# The clinical→pubmed cross-server tool, mirroring drug_context_for_trial's
+# clinical→openFDA join. Given an NCT id it builds a query from the trial's
+# conditions + interventions + title and runs ONE hybrid (vector+FTS) search
+# against source_id='pubmed' to surface related published literature.
+#
+# Semantic search (not FTS) is the right tool here: papers about a condition
+# rarely keyword-match a trial's title, but they're conceptually close — which
+# is exactly what the embedding captures. One Voyage query embedding, one
+# pgvector search. The not-medical-advice PubMed disclaimer is appended.
+
+_TRIAL_EVIDENCE_LOOKUP_SQL = """
+SELECT title, structured
+FROM documents
+WHERE source_id = 'clinical' AND doc_id = $1
+"""
+
+_EVIDENCE_DEFAULT_TOP_K = 8
+_EVIDENCE_MAX_TOP_K = 20
+
+
+def _format_evidence_row(idx: int, r: Record) -> str:
+    s = r["structured"] or {}
+    journal = s.get("journal") or "?"
+    pubdate = s.get("pubdate") or "?"
+    authors = s.get("authors") or []
+    first_author = f"{authors[0]} et al." if authors else "(no authors listed)"
+    return (
+        f"  [{idx}] PMID {r['doc_id']} — {r['title']}\n"
+        f"      {first_author}  {journal}  {pubdate}\n"
+        f"      {r['url']}"
+    )
+
+
+async def evidence_for_trial(
+    nct_id: str,
+    top_k: int = _EVIDENCE_DEFAULT_TOP_K,
+) -> list[TextContent]:
+    """Surface related published literature for a clinical trial.
+
+    Looks up ``nct_id`` in the local clinical corpus, builds a query from its
+    conditions + interventions + title, and runs ONE hybrid search against the
+    local ``pubmed`` corpus. Returns the top matching articles as a cited list.
+
+    The PubMed not-medical-advice disclaimer is appended. Errors are returned
+    as TextContent, never raised (MCP tool contract).
+    """
+    try:
+        nct_id = (nct_id or "").strip().upper()
+        if not nct_id:
+            return [TextContent(type="text", text="Error: nct_id must not be empty.")]
+        top_k = max(1, min(top_k, _EVIDENCE_MAX_TOP_K))
+
+        async with get_pool().acquire() as conn:
+            trial = await conn.fetchrow(_TRIAL_EVIDENCE_LOOKUP_SQL, nct_id)
+        if trial is None:
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        f"{nct_id} is not in the local clinical corpus. Ingest it "
+                        f"first, or use semantic_search to find ingested trials."
+                    ),
+                )
+            ]
+
+        structured = trial["structured"] or {}
+        conditions = [c for c in (structured.get("conditions") or []) if isinstance(c, str)]
+        interventions = [i for i in (structured.get("interventions") or []) if isinstance(i, str)]
+        # Build a semantic query from the trial's clinical concepts. Title is
+        # the fallback when conditions/interventions are sparse.
+        query = " ".join([*conditions, *interventions, trial["title"]]).strip()
+        if not query:
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        f"{nct_id} ({trial['title']}) has no conditions, interventions, "
+                        f"or title to search literature with.\n\n---\n{PUBMED_DISCLAIMER}"
+                    ),
+                )
+            ]
+
+        rows = await query_documents(get_pool(), "pubmed", query, top_k=top_k)
+
+        lines = [f"Published evidence related to {nct_id}: {trial['title']}"]
+        if conditions:
+            lines.append(f"Conditions: {', '.join(conditions)}")
+        if interventions:
+            lines.append(f"Interventions: {', '.join(interventions)}")
+        lines.append("")
+        if not rows:
+            lines.append(
+                "No related PubMed records in the local corpus. Ingest the pubmed "
+                "source (python -m core.ingest --source pubmed) to populate it."
+            )
+        else:
+            lines.append(f"Top {len(rows)} related article(s):")
+            lines.extend(_format_evidence_row(i, r) for i, r in enumerate(rows, 1))
+
+        lines.append(f"\n---\n{PUBMED_DISCLAIMER}")
+        return [TextContent(type="text", text="\n".join(lines))]
+    except Exception as exc:  # noqa: BLE001 — tool must not raise out
+        logger.exception("evidence_for_trial failed")
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"Error running evidence_for_trial: {type(exc).__name__}: {exc}\n\n"
+                    f"---\n{PUBMED_DISCLAIMER}"
                 ),
             )
         ]

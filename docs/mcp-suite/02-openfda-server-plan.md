@@ -35,8 +35,12 @@ template so it ships in ~1 day and *cross-sells directly with `clinical-mcp`*.
 | `drug/event` (FAERS) | Adverse-event reports: reactions, outcomes, drug roles | Partial — embed the reaction narrative; keep counts structured |
 | `drug/enforcement` | Recalls / enforcement actions: reason, classification, status | **Yes** — recall reason text |
 
-Defer for v2: `drug/drugsfda` (approval history), `device/*`, `food/*`, NDC directory.
 Three `source_id`s in v1: `openfda_label`, `openfda_event`, `openfda_enforcement`.
+
+**Update (Phase E, 2026-06):** `drug/drugsfda` (approval history) shipped as a **fourth**
+`source_id` `openfda_drugsfda` — same `OpenFDAConnectorBase`, generic tools only, folded
+into the clinical `drug_context_for_trial` join as the approvals source. Still deferred:
+`device/*`, `food/*`, NDC directory.
 
 ---
 

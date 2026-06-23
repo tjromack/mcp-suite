@@ -1,0 +1,64 @@
+# Phase F — example scheduler for the incremental refresh orchestrator.
+#
+# Runs `python -m core.refresh --due` on a cron, so each source is refreshed
+# only when its [refresh] cadence (in servers/<id>/server.toml) has elapsed.
+# This is the "always fresh" half of the suite's positioning, wired unattended.
+#
+# Requirements to actually run against real data:
+#   - A reachable Postgres+pgvector (a hosted DB, not a local container) —
+#     set DATABASE_URL as a repo secret.
+#   - VOYAGE_API_KEY (embeddings). ANTHROPIC_API_KEY is only needed by the
+#     LLM tools at query time, not by refresh.
+#   - Optionally OPENFDA_API_KEY / NCBI_API_KEY to lift upstream rate caps.
+# Without those secrets the scheduled job no-ops cleanly (nothing due / no DB),
+# so this file is safe to commit as documentation of the intended wiring.
+
+name: refresh
+
+on:
+  schedule:
+    # 07:00 UTC daily. --due means only sources past their cadence actually run
+    # (FAERS daily; labels/recalls/approvals/literature/trials weekly).
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Refresh selection"
+        type: choice
+        default: "--due"
+        options: ["--due", "--all"]
+      full:
+        description: "Ignore watermark (full re-backfill)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # Guard: only run where the DB secret is configured (skips on forks).
+    if: ${{ github.repository_owner != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Sync deps
+        run: uv sync --native-tls
+      - name: Run refresh
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          OPENFDA_API_KEY: ${{ secrets.OPENFDA_API_KEY }}
+          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL not set — skipping (configure the secret to enable)."
+            exit 0
+          fi
+          MODE="${{ github.event.inputs.mode || '--due' }}"
+          FULL=""
+          if [ "${{ github.event.inputs.full }}" = "true" ]; then FULL="--full"; fi
+          uv run --native-tls python -m core.refresh $MODE $FULL

@@ -26,8 +26,10 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Test / coverage
+# Test / coverage / tool caches
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 

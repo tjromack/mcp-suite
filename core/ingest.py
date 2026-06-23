@@ -140,6 +140,58 @@ async def _flush_batch(
 # --- main run --------------------------------------------------------------
 
 
+async def ingest_with_pool(
+    pool: asyncpg.Pool,
+    connector: DataSource,
+    since: datetime | None,
+    batch_size: int,
+) -> dict[str, int]:
+    """Run the fetch→normalize→embed→upsert loop against an existing pool.
+
+    Pool-management-free so callers that already own a pool (the refresh
+    orchestrator in ``core.refresh``) can reuse it. Returns run stats:
+    ``{fetched, unique, embedded, skipped}``.
+    """
+    fetched = 0
+    embedded = 0
+    skipped = 0
+    seen: set[str] = set()
+    batch: list[Document] = []
+
+    async for raw in connector.fetch(since):
+        fetched += 1
+        doc = connector.normalize(raw)
+        if not doc.doc_id or not doc.embed_text.strip():
+            skipped += 1
+            continue
+        if doc.doc_id in seen:
+            continue
+        seen.add(doc.doc_id)
+        batch.append(doc)
+        if len(batch) >= batch_size:
+            e, s = await _flush_batch(pool, batch)
+            embedded += e
+            skipped += s
+            logger.info("Processed %d (embedded=%d skipped=%d)", fetched, embedded, skipped)
+            batch = []
+
+    if batch:
+        e, s = await _flush_batch(pool, batch)
+        embedded += e
+        skipped += s
+
+    stats = {"fetched": fetched, "unique": len(seen), "embedded": embedded, "skipped": skipped}
+    logger.info(
+        "Done. source=%s fetched=%d unique=%d embedded=%d skipped=%d",
+        connector.source_id,
+        fetched,
+        len(seen),
+        embedded,
+        skipped,
+    )
+    return stats
+
+
 async def run(
     source_id: str,
     since: datetime | None,
@@ -148,42 +200,7 @@ async def run(
     connector = load_connector(source_id)
     pool = await db_connection.init_pool(settings.database_url)
     try:
-        fetched = 0
-        embedded = 0
-        skipped = 0
-        seen: set[str] = set()
-        batch: list[Document] = []
-
-        async for raw in connector.fetch(since):
-            fetched += 1
-            doc = connector.normalize(raw)
-            if not doc.doc_id or not doc.embed_text.strip():
-                skipped += 1
-                continue
-            if doc.doc_id in seen:
-                continue
-            seen.add(doc.doc_id)
-            batch.append(doc)
-            if len(batch) >= batch_size:
-                e, s = await _flush_batch(pool, batch)
-                embedded += e
-                skipped += s
-                logger.info("Processed %d (embedded=%d skipped=%d)", fetched, embedded, skipped)
-                batch = []
-
-        if batch:
-            e, s = await _flush_batch(pool, batch)
-            embedded += e
-            skipped += s
-
-        logger.info(
-            "Done. source=%s fetched=%d unique=%d embedded=%d skipped=%d",
-            source_id,
-            fetched,
-            len(seen),
-            embedded,
-            skipped,
-        )
+        await ingest_with_pool(pool, connector, since, batch_size)
     finally:
         await db_connection.close_pool()
 

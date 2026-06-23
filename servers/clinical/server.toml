@@ -13,7 +13,11 @@ generic_tools = ["semantic_search", "get_details", "find_similar"]
 # Custom tools defined in servers/clinical/tools.py — the vertical-specific
 # LLM tool. Discovered by name; each entry is a function name exported from
 # the module.
-custom_tools = ["summarize_eligibility", "drug_context_for_trial"]
+custom_tools = ["summarize_eligibility", "drug_context_for_trial", "evidence_for_trial"]
+
+# Refresh cadence read by core/refresh.py --due. Trials change but not hourly.
+[refresh]
+cadence = "weekly"
 
 # Optional connector configuration. core/server.py reads this when
 # instantiating CTGovConnector.

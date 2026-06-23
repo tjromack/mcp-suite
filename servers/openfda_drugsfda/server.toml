@@ -1,0 +1,29 @@
+# openFDA — Drugs@FDA approval-history server.
+# Consumed by core/server.py when MCP_SUITE_SOURCE=openfda_drugsfda and by
+# core/ingest.py when invoked with --source openfda_drugsfda.
+
+source_id    = "openfda_drugsfda"
+embed_fields = [
+    "products.brand_name",
+    "openfda.generic_name",
+    "openfda.substance_name",
+    "sponsor_name",
+]
+
+# Generic tools come from core/tools/ — zero per-vertical code. This source is
+# structured-lookup-first (approval status, submission dates), so it ships the
+# three generic tools and no custom LLM tool; its approval context is folded
+# into the clinical server's drug_context_for_trial cross-source join instead.
+generic_tools = ["semantic_search", "get_details", "find_similar"]
+custom_tools = []
+
+# Refresh cadence read by core/refresh.py --due. Approvals update slowly.
+[refresh]
+cadence = "weekly"
+
+[connector]
+# Empty `search` = scan the whole corpus. Provide a Lucene-style clause here
+# (without the `search=` prefix) to scope the backfill, e.g.
+# search = 'products.marketing_status:"Prescription"'.
+page_size = 100
+# max_records = 50  # uncomment for capped sanity runs; omit for full scan

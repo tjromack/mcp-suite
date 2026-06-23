@@ -8,6 +8,10 @@ embed_fields = ["reason_for_recall", "product_description", "code_info"]
 generic_tools = ["semantic_search", "get_details", "find_similar"]
 custom_tools  = []
 
+# Refresh cadence read by core/refresh.py --due. Recalls are posted in batches.
+[refresh]
+cadence = "weekly"
+
 [connector]
 page_size = 100
 # max_records = 50  # uncomment for capped ingest; omit for full scan

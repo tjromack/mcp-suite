@@ -20,6 +20,10 @@ generic_tools = ["semantic_search", "get_details", "find_similar"]
 # openfda_event + openfda_enforcement). Lives in servers/openfda_label/tools.py.
 custom_tools = ["summarize_safety_profile"]
 
+# Refresh cadence read by core/refresh.py --due. Labels change slowly.
+[refresh]
+cadence = "weekly"
+
 [connector]
 # Empty `search` = scan the whole corpus. Provide a Lucene-style search clause
 # here (without the `search=` prefix) to scope the backfill.

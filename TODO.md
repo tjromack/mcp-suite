@@ -1,13 +1,50 @@
 # TODO — mcp-suite
 
-**Status (2026-05): Phases 1–4 + Phase A (PR #9, merged) + ctgov retry follow-up (PR #10, merged) + Phase B (PR #11, merged) complete. PR #12 in flight adds the cross-server `drug_context_for_trial`.**
+**Status (2026-06): Phases 1–4 + A + B shipped & merged; the openFDA cross-server tool (PR #12) and reliability hardening (PR #13) are merged; servers #3 (PubMed) + #4 (Drugs@FDA approvals) + `evidence_for_trial` + Phase F (incremental refresh orchestrator) + Phase G (tool-call metering + `corpus_status`) + Phase H (API-key/tier authorization gate) are built on this branch. 217 tests, ruff + mypy clean.**
 
-- Phases 1–4 shipped clinical-mcp v0.1 end-to-end.
-- Phase A merged in PR #9 — repo is now a shared-`core/` + per-vertical-`servers/<x>/` suite template.
-- PR #10 merged the ctgov retry+backoff follow-up after the live Phase-A validation hit a single curl timeout at ~84,600 ingested rows.
-- **Phase B** merged in PR #11 — three openFDA `source_id`s (`openfda_label`, `openfda_event`, `openfda_enforcement`) sharing the canonical `documents` table, with a cross-source `summarize_safety_profile` custom tool that joins labels + FAERS + recalls in one Claude call. API schemas were verified via WebFetch against live `api.fda.gov` responses before any code was written. Validated on a 50-row-per-source sanity backfill.
-- **PR #12 (drug_context_for_trial)** — closes out plan §3 #5: lives on the clinical server, takes an NCT id, extracts interventions from the local clinical record, runs FTS lookups against the three openFDA corpora in one round-trip per drug. Pure SQL, no Voyage/Claude cost. Disclaimer baked in. **134 tests, ruff + mypy clean.**
-- **Phase C (landing page)** is the next strategic item — see [`docs/mcp-suite/03-pricing-and-positioning.md`](docs/mcp-suite/03-pricing-and-positioning.md).
+### Merged on `main`
+- **Phases 1–4** — clinical-mcp v0.1 end-to-end.
+- **Phase A** (PR #9) — repo is now a shared-`core/` + per-vertical-`servers/<x>/` suite template.
+- **PR #10** — ctgov retry+backoff after the live Phase-A validation hit a single curl timeout at ~84,600 ingested rows.
+- **Phase B** (PR #11) — three openFDA `source_id`s (`openfda_label`, `openfda_event`, `openfda_enforcement`) on the canonical `documents` table + cross-source `summarize_safety_profile`. API schemas verified via WebFetch against live `api.fda.gov` first. Validated on a 50-row-per-source sanity backfill.
+- **PR #12** — `drug_context_for_trial`: clinical→openFDA FTS join, pure SQL, disclaimer baked in.
+- **PR #13** — openFDA retry+backoff on transient 5xx + `api_key` scrubbed from logs.
+
+### On this branch (Phases D + E — servers #3 and #4)
+- **Phase D — PubMed server** (`source_id="pubmed"`) — `PubMedConnector` over NCBI E-utilities (esearch→efetch, stdlib XML parsing, no new dep), `summarize_evidence` cited-synthesis custom tool, and the **`evidence_for_trial`** clinical→pubmed cross-server tool. NCBI API verified against live responses first. Plan: [`docs/mcp-suite/04-pubmed-server-plan.md`](docs/mcp-suite/04-pubmed-server-plan.md).
+- **Phase E — Drugs@FDA server** (`source_id="openfda_drugsfda"`) — `OpenFDADrugsFDAConnector(OpenFDAConnectorBase)` for FDA approval history (application/sponsor/products/submissions + marketing & approval status), generic tools only. Folded into `drug_context_for_trial` as a **4th** cross-source (approvals + labels + FAERS + recalls per intervention drug). API + nested-date incremental query verified against live `api.fda.gov` first. Suite 148 → 177 tests.
+- Remaining for both: live backfill + Claude Desktop end-to-end demo (needs network + keys; run off-proxy).
+
+---
+
+## Build posture — portfolio-first (2026-06 decision)
+
+The strategy docs ([03-pricing-and-positioning.md](docs/mcp-suite/03-pricing-and-positioning.md) §5) originally **gated** servers #3–4 behind a paying Suite customer or usage data. For the portfolio build-out that gate is **relaxed**: servers are engineering milestones that demonstrate the suite thesis (authoritative + cited + cross-source). The commercial-validation track is preserved but **decoupled from "keep building"** — it's now **Phase I**.
+
+### Roadmap to the whole suite
+
+Full plan + per-phase definition-of-done: **[docs/mcp-suite/05-roadmap.md](docs/mcp-suite/05-roadmap.md)**. The dependency order is *breadth → freshness → observability → productization → go-to-market → more breadth*.
+
+| Phase | Deliverable | State |
+|---|---|---|
+| **A–B** | Template refactor + openFDA family | ✅ merged |
+| **C** | Cross-server tools (`drug_context_for_trial`, `evidence_for_trial`) | ✅ |
+| **D** | Server #3 — **PubMed** (literature) | ✅ |
+| **E** | Server #4 — **Drugs@FDA** (approvals) | ✅ |
+| **F** | **Freshness & data ops** — `core/refresh.py` orchestrator, `source_state` watermarks, per-source cadence, example scheduler | ✅ this branch |
+| **G** | **Observability & metering** — `tool_calls` metering on every tool + `corpus_status` diagnostic | ✅ this branch |
+| **H** | **Platform / gateway** (`mcp_platform/`) — API keys, tiers, per-key rate limits + cross-server gating | ✅ this branch |
+| **I** | **Landing page + commercial validation** — `mcp-suite-site`, free-key CTA, 5 conversations (was Phase C/G) | ⬜ **next** |
+| **J** | **Breadth on demand** — servers #5+ (NPI, RxNorm), only on a usage/cross-sell signal | ⬜ |
+
+Why F next, not another server: with 6 sources spanning trials + the full FDA quadrant + literature, "always fresh" — not "one more source" — is the claim that proves the positioning. Breadth (Phase J) is the cheapest axis and is deliberately last.
+
+Each is a ~1-day build on the contracts: one `DataSource` connector + optional custom tool + `server.toml` + tests. Add a cross-server tool when it unlocks a real "X → Y" question.
+
+### Phase F — refresh pipelines (the moat)
+The positioning calls the freshness pipeline "the product." Once ≥2 servers carry real backfills, add a scheduler invoking `python -m core.ingest --source <id> --since <last-run>` per source on a cadence (events daily; labels/recalls/literature weekly). Keep it boring — cron or a single Airflow DAG; no multi-tenant infra. Idempotent upserts mean re-runs are safe.
+
+---
 
 Phases 1–4 below are kept as the build record.
 
