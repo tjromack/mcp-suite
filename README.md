@@ -130,8 +130,8 @@ batch). Tools never raise — every failure returns `TextContent`.
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/tjromack/clinical-mcp.git
-cd clinical-mcp
+git clone https://github.com/tjromack/mcp-suite.git
+cd mcp-suite
 uv sync
 ```
 
@@ -326,10 +326,10 @@ container would just sit there. To use it:
 ```bash
 docker compose --profile server build
 # ingest inside the container (DB comes up automatically, healthcheck-gated):
-docker compose run --rm mcp uv run python scripts/ingest_trials.py --query cancer --max 50
-# sanity-check the server wiring (lists the 4 registered tools):
-docker compose run --rm --no-deps mcp uv run python -c \
-  "import asyncio; from clinical_trial_mcp.server import mcp; print([t.name for t in asyncio.run(mcp.list_tools())])"
+docker compose run --rm mcp uv run python -m core.ingest --source clinical
+# sanity-check the server wiring (lists the registered tools):
+docker compose run --rm --no-deps -e MCP_SUITE_SOURCE=clinical mcp uv run python -c \
+  "import asyncio; from core.server import mcp; print([t.name for t in asyncio.run(mcp.list_tools())])"
 ```
 
 (`.env` is picked up if present; the in-container `DATABASE_URL` is overridden

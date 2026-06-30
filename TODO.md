@@ -114,7 +114,7 @@ Phases 1–4 below are kept as the build record.
 - [x] Record demo GIF of Claude Desktop interaction; embedded in README (`docs/demo.gif`)
 - [x] Final README pass: fixed schema-apply command (PowerShell), multi-query example, Claude Desktop §, added Performance + Troubleshooting, updated structure
 - [x] Repo initialized + pushed to **private** GitHub repo `tjromack/clinical-mcp` (`.env` & `.claude/settings.local.json` excluded; `uv.lock` + `.gitattributes` tracked; initial commit `e1c9ccb`)
-- [x] Tag `v0.1.0` release + release notes — annotated tag `v0.1.0`, GitHub release published (https://github.com/tjromack/clinical-mcp/releases/tag/v0.1.0)
+- [x] Tag `v0.1.0` release + release notes — annotated tag `v0.1.0`, GitHub release published (https://github.com/tjromack/mcp-suite/releases/tag/v0.1.0)
 - [ ] **Ship it**: share on LinkedIn/Twitter with the demo GIF (**USER**: personal action; flip repo public when ready)
 
 ## Phase 4 — Portfolio Polish & Future Work
