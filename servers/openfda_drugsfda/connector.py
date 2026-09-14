@@ -13,7 +13,7 @@ while the high-value approval data lives in ``structured`` for ``get_details``.
 
 Incremental refresh filters on the nested ``submissions.submission_status_date``
 (verified to work as an openFDA range query); the base class assembles the
-``[YYYYMMDD+TO+99991231]`` clause.
+``[YYYYMMDD TO 99991231]`` clause.
 """
 
 from __future__ import annotations

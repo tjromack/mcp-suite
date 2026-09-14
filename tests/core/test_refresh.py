@@ -157,7 +157,9 @@ async def test_resolve_sources_all_returns_discovered(mock_pool):
 
 
 async def test_resolve_sources_due_filters_by_cadence(mock_pool, mock_conn):
-    now = datetime(2026, 6, 23, tzinfo=UTC)
+    # resolve_sources reads the real clock, so anchor states to it (a fixed
+    # date here silently goes stale and makes 'b' due too).
+    now = datetime.now(UTC)
     # 'a' is due (stale), 'b' is not (fresh daily).
     states = {
         "a": _state(last_success_at=now - timedelta(days=10)),

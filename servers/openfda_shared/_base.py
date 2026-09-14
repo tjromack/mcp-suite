@@ -219,16 +219,21 @@ class OpenFDAConnectorBase(ABC):
 
     def _build_search_clause(self, since: datetime | None) -> str | None:
         """Combine the connector's ``self._search`` clause and the optional
-        ``since`` date filter into one ``search=`` value."""
+        ``since`` date filter into one ``search=`` value.
+
+        Use literal spaces, not ``+``: the value goes through httpx ``params``,
+        which percent-encodes ``+`` to ``%2B`` — openFDA then rejects the range
+        query with HTTP 500 (verified live). Spaces encode correctly.
+        """
         clauses: list[str] = []
         if self._search:
             clauses.append(f"({self._search})")
         if since is not None and self.since_field:
             yyyymmdd = since.strftime("%Y%m%d")
-            clauses.append(f"{self.since_field}:[{yyyymmdd}+TO+99991231]")
+            clauses.append(f"{self.since_field}:[{yyyymmdd} TO 99991231]")
         if not clauses:
             return None
-        return "+AND+".join(clauses)
+        return " AND ".join(clauses)
 
     # ----------------------------------------------------------------- fetch
 

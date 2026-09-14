@@ -88,13 +88,22 @@ class _Probe(OpenFDAConnectorBase):
 def test_search_clause_only_since():
     c = _Probe()
     out = c._build_search_clause(datetime(2026, 1, 1, tzinfo=UTC))
-    assert out == "report_date:[20260101+TO+99991231]"
+    assert out == "report_date:[20260101 TO 99991231]"
 
 
 def test_search_clause_combines_search_and_since():
     c = _Probe(search='classification:"Class I"')
     out = c._build_search_clause(datetime(2026, 1, 1, tzinfo=UTC))
-    assert out == '(classification:"Class I")+AND+report_date:[20260101+TO+99991231]'
+    assert out == '(classification:"Class I") AND report_date:[20260101 TO 99991231]'
+
+
+def test_search_clause_survives_httpx_param_encoding():
+    # Regression: a literal "+" is sent as %2B and openFDA 500s on the range
+    # query. Spaces must reach the wire as "+"/"%20", never "%2B".
+    c = _Probe(search='classification:"Class I"')
+    search = c._build_search_clause(datetime(2026, 1, 1, tzinfo=UTC))
+    url = str(httpx.Request("GET", "https://api.fda.gov/x.json", params={"search": search}).url)
+    assert "%2B" not in url
 
 
 def test_search_clause_none_when_no_filters():
@@ -206,7 +215,7 @@ async def test_fetch_threads_search_and_since_into_params():
 
     assert client.calls
     params = client.calls[0]["params"]
-    assert params["search"] == '(x:"y")+AND+report_date:[20260101+TO+99991231]'
+    assert params["search"] == '(x:"y") AND report_date:[20260101 TO 99991231]'
     assert params["limit"] == "100"
 
 

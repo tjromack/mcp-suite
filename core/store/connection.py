@@ -2,9 +2,27 @@
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 import asyncpg
 
 _pool: asyncpg.Pool | None = None
+
+
+def _encode_json(value: Any) -> str:
+    # Writers (ingest, refresh) already pass json.dumps() strings; pass those
+    # through untouched so stored bytes don't change (no double-encoding).
+    return value if isinstance(value, str) else json.dumps(value, default=str)
+
+
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    """Decode json/jsonb columns to Python objects. Without this asyncpg returns
+    them as raw strings, and tools doing ``row["structured"].get(...)`` crash."""
+    for typename in ("json", "jsonb"):
+        await conn.set_type_codec(
+            typename, encoder=_encode_json, decoder=json.loads, schema="pg_catalog"
+        )
 
 
 async def init_pool(dsn: str, *, min_size: int = 2, max_size: int = 10) -> asyncpg.Pool:
@@ -16,6 +34,7 @@ async def init_pool(dsn: str, *, min_size: int = 2, max_size: int = 10) -> async
         dsn=dsn,
         min_size=min_size,
         max_size=max_size,
+        init=_init_connection,
     )
     return _pool
 

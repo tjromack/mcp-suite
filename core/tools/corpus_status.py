@@ -22,7 +22,9 @@ logger = logging.getLogger("core.tools.corpus_status")
 _COUNTS_SQL = """
 SELECT source_id,
        count(*)          AS doc_count,
-       max(updated_at)   AS newest,
+       -- Upstream data carries some future dates (openFDA effective_time,
+       -- PubMed forward-dated issues); they'd misreport freshness.
+       max(updated_at) FILTER (WHERE updated_at <= now()) AS newest,
        max(ingested_at)  AS last_ingest
 FROM documents
 GROUP BY source_id
