@@ -265,19 +265,19 @@ into your Claude Desktop config and edit the absolute path:
   "mcpServers": {
     "clinical-trials": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/clinical-mcp",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
                "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "clinical" }
     },
     "fda-drugs": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/clinical-mcp",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
                "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "openfda_label" }
     },
     "pubmed": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/clinical-mcp",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
                "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "pubmed" }
     }

@@ -2,17 +2,18 @@
   "mcpServers": {
     "clinical-trials": {
       "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "C:\\ABSOLUTE\\PATH\\TO\\clinical-mcp",
-        "python",
-        "-m",
-        "clinical_trial_mcp.server"
-      ],
-      "env": {
-        "UV_NATIVE_TLS": "1"
-      }
+      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\mcp-suite", "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "clinical" }
+    },
+    "fda-drugs": {
+      "command": "uv",
+      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\mcp-suite", "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "openfda_label" }
+    },
+    "pubmed": {
+      "command": "uv",
+      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\mcp-suite", "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "pubmed" }
     }
   }
 }

@@ -1,3 +1,9 @@
+# Pinned project name: the repo was renamed from clinical-mcp, and compose
+# derives volume names from the project (`clinical-mcp_pgdata`). Without this,
+# `docker compose up` from a renamed checkout collides on container_name and
+# would point at a fresh, empty volume instead of the ingested corpus.
+name: clinical-mcp
+
 services:
   db:
     image: pgvector/pgvector:pg16
