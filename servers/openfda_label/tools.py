@@ -88,8 +88,9 @@ def _format_label_row(r: Record) -> str:
     if s.get("has_warnings"):
         flags.append("has warnings")
     flag_str = " | ".join(flags) if flags else "no warnings flags"
+    names = f"brand={brand!r} generic={generic!r}" if brand or generic else f"name={r['title']!r}"
     return (
-        f"- [{r['doc_id']}] brand={brand!r} generic={generic!r} "
+        f"- [{r['doc_id']}] {names} "
         f"effective={s.get('effective_time', '?')}  {flag_str}\n"
         f"  url: {r['url']}"
     )

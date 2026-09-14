@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from core.connector import DataSource
 from core.document import Document
 from servers.openfda_label.connector import CONNECTOR_CLASS, OpenFDALabelConnector
@@ -76,6 +78,34 @@ def test_normalize_falls_back_to_generic_when_no_brand():
     }
     doc = OpenFDALabelConnector().normalize(raw)
     assert doc.title == "ACETAMINOPHEN"
+
+
+@pytest.mark.parametrize(
+    ("elements", "expected"),
+    [
+        # Proprietary name, then ALL-CAPS ingredients; repeats collapse.
+        ("Ofloxacin Ofloxacin OFLOXACIN OFLOXACIN Sodium Chloride", "Ofloxacin"),
+        (
+            "Ephed 60 Pseudoephedrine PSEUDOEPHEDRINE HYDROCHLORIDE WATER",
+            "Ephed 60 Pseudoephedrine",
+        ),
+        ("Mezereum DAPHNE MEZEREUM BARK SUCROSE", "Mezereum"),
+        # Proprietary name == generic name → collapse the repeated phrase.
+        ("Amlodipine Besylate amlodipine besylate AMLODIPINE BESYLATE", "Amlodipine Besylate"),
+        (
+            "CETIRIZINE HYDROCHLORIDE CETIRIZINE HYDROCHLORIDE STARCH, CORN",
+            "CETIRIZINE HYDROCHLORIDE",
+        ),
+        # All-caps name → first few words.
+        (
+            "CHANTECAILLE PROTECTION NATURELLE BRONZE SPF 46 TITANIUM DIOXIDE",
+            "CHANTECAILLE PROTECTION NATURELLE BRONZE SPF 46",
+        ),
+    ],
+)
+def test_normalize_titles_unharmonized_label_from_product_elements(elements, expected):
+    raw = {"id": "x", "spl_product_data_elements": [elements]}
+    assert OpenFDALabelConnector().normalize(raw).title == expected
 
 
 def test_normalize_handles_sparse_label_gracefully():

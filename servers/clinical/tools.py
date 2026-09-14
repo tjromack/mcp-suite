@@ -18,6 +18,7 @@ narrative if they want. The openFDA DISCLAIMER is appended per plan §7.
 from __future__ import annotations
 
 import logging
+import re
 
 from anthropic import AsyncAnthropic
 from anthropic.types import TextBlock
@@ -167,6 +168,15 @@ LIMIT $3
 _MAX_INTERVENTIONS = 5
 _DEFAULT_TOP_K = 3
 
+# Comparator arms that aren't drugs. FTS-matching "Placebo" against openFDA
+# returns unrelated labels whose text mentions placebo-controlled studies, so
+# these are skipped (and listed as skipped) rather than joined.
+_NON_DRUG_INTERVENTION_RE = re.compile(
+    r"\b(placebos?|sham|standard[- ]of[- ]care|best supportive care|"
+    r"no (intervention|treatment)|observation)\b",
+    re.IGNORECASE,
+)
+
 
 def _format_label_match(r: Record) -> str:
     s = r["structured"] or {}
@@ -178,9 +188,10 @@ def _format_label_match(r: Record) -> str:
     if s.get("has_warnings"):
         flags.append("has warnings")
     flag_str = " | ".join(flags) if flags else "no warning flags"
-    return (
-        f"  - [{r['doc_id']}] brand={brand!r} generic={generic!r}  {flag_str}\n    url: {r['url']}"
-    )
+    # Unharmonized labels have no brand/generic; the stored title is the
+    # best available product name (see OpenFDALabelConnector.normalize).
+    names = f"brand={brand!r} generic={generic!r}" if brand or generic else f"name={r['title']!r}"
+    return f"  - [{r['doc_id']}] {names}  {flag_str}\n    url: {r['url']}"
 
 
 def _format_event_match(r: Record) -> str:
@@ -272,11 +283,13 @@ async def drug_context_for_trial(
                 ]
 
             structured = trial["structured"] or {}
-            interventions = [
+            listed = [
                 i
                 for i in (structured.get("interventions") or [])
                 if isinstance(i, str) and i.strip()
             ]
+            interventions = [i for i in listed if not _NON_DRUG_INTERVENTION_RE.search(i)]
+            skipped = [i for i in listed if _NON_DRUG_INTERVENTION_RE.search(i)]
             if not interventions:
                 return [
                     TextContent(
@@ -298,6 +311,8 @@ async def drug_context_for_trial(
                 f"Interventions in local record: {', '.join(interventions)}"
                 + (f"  (showing first {_MAX_INTERVENTIONS})" if truncated else "")
             )
+            if skipped:
+                lines.append(f"Skipped (non-drug comparators): {', '.join(skipped)}")
             lines.append("")
 
             for drug in shown:
@@ -410,7 +425,11 @@ async def evidence_for_trial(
 
         structured = trial["structured"] or {}
         conditions = [c for c in (structured.get("conditions") or []) if isinstance(c, str)]
-        interventions = [i for i in (structured.get("interventions") or []) if isinstance(i, str)]
+        interventions = [
+            i
+            for i in (structured.get("interventions") or [])
+            if isinstance(i, str) and not _NON_DRUG_INTERVENTION_RE.search(i)
+        ]
         # Build a semantic query from the trial's clinical concepts. Title is
         # the fallback when conditions/interventions are sparse.
         query = " ".join([*conditions, *interventions, trial["title"]]).strip()

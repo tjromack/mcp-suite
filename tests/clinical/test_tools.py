@@ -205,6 +205,25 @@ async def test_drug_context_caps_intervention_count(_patch_pool, mock_conn):
     assert DISCLAIMER in text
 
 
+async def test_drug_context_skips_non_drug_comparators(_patch_pool, mock_conn):
+    mock_conn.fetchrow.return_value = {
+        "title": "Drug X vs placebo",
+        "structured": {
+            "interventions": ["Drug X", "Placebo", "Matching placebo", "Sham procedure"]
+        },
+    }
+    mock_conn.fetch.return_value = []
+
+    result = await drug_context_for_trial("NCT00000066")
+    text = result[0].text
+
+    assert "=== Drug X ===" in text
+    assert "=== Placebo ===" not in text
+    assert "Skipped (non-drug comparators): Placebo, Matching placebo, Sham procedure" in text
+    # Only Drug X fans out: 1 drug × 4 sources.
+    assert mock_conn.fetch.await_count == 4
+
+
 async def test_drug_context_empty_nct_id_short_circuits(_patch_pool, mock_conn):
     result = await drug_context_for_trial("   ")
     assert "must not be empty" in result[0].text

@@ -19,6 +19,38 @@ from servers.openfda_shared._base import (
 )
 
 _DAILYMED_URL = "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid={set_id}"
+_TITLE_MAX_WORDS = 6
+_TITLE_MAX_CHARS = 80
+
+
+def _title_from_product_elements(raw: dict) -> str:
+    """Best-effort product name for labels with no ``openfda`` harmonization.
+
+    Most OTC / homeopathic / unapproved labels (~2/3 of the endpoint) carry no
+    ``openfda.brand_name``/``generic_name``. Their ``spl_product_data_elements``
+    is an undelimited run: the proprietary name as typed, then ingredient names
+    in ALL CAPS (e.g. ``"Ofloxacin Ofloxacin OFLOXACIN OFLOXACIN Sodium ..."``).
+    Take the words before the first all-caps word, dropping case-insensitive
+    repeats; if the name itself is all caps, keep the first few words.
+    """
+    words = first(raw.get("spl_product_data_elements")).split()
+    if not words:
+        return ""
+    # Proprietary name is often repeated verbatim as the generic name
+    # ("Amlodipine Besylate amlodipine besylate AMLODIPINE ..."): the shortest
+    # leading phrase that immediately repeats is the name.
+    folded = [w.lower() for w in words]
+    for k in range(1, min(_TITLE_MAX_WORDS, len(words) // 2) + 1):
+        if folded[:k] == folded[k : 2 * k]:
+            return " ".join(words[:k]).rstrip(",;")[:_TITLE_MAX_CHARS]
+    lead: list[str] = []
+    for w in words:
+        if sum(c.isalpha() for c in w) >= 2 and w.isupper():
+            break
+        if not lead or lead[-1].lower() != w.lower():
+            lead.append(w)
+    title = " ".join(lead[:_TITLE_MAX_WORDS] or words[:_TITLE_MAX_WORDS])
+    return title[:_TITLE_MAX_CHARS].strip().rstrip(",;")
 
 
 class OpenFDALabelConnector(OpenFDAConnectorBase):
@@ -51,7 +83,7 @@ class OpenFDALabelConnector(OpenFDAConnectorBase):
         set_id = first(openfda.get("spl_set_id")) or raw.get("set_id") or ""
         brand = first(openfda.get("brand_name"))
         generic = first(openfda.get("generic_name"))
-        title = brand or generic or "(unnamed label)"
+        title = brand or generic or _title_from_product_elements(raw) or "(unnamed label)"
 
         embed_text = join_arrays(
             openfda.get("brand_name"),
