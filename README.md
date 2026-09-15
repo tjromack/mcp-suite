@@ -12,7 +12,7 @@
 - **openfda_drugsfda** — FDA Drugs@FDA approval history (3 generic tools)
 - **pubmed** — PubMed biomedical literature (3 generic tools + `summarize_evidence` — cited synthesis over abstracts)
 
-217 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
+226 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
 
 📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
@@ -304,7 +304,7 @@ The legacy `python -m clinical_trial_mcp.server` entry point still works as a co
 ## Running Tests
 
 ```bash
-uv run pytest tests/ -v          # 61 tests, fully mocked (no DB/network/keys)
+uv run pytest tests/ -v          # 226 tests, fully mocked (no DB/network/keys)
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 

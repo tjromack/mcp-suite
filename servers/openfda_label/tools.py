@@ -59,10 +59,28 @@ Reading level "clinician": preserve technical precision, MedDRA terms, \
 classification levels, drug roles (suspect/concomitant/interacting).
 
 Strict rules:
-- Do NOT invent information not present in the source records.
+- Use ONLY the text of the provided records. Do NOT add facts from your own \
+knowledge, and never describe what labeling "typically" or "usually" says.
+- Records are retrieved by similarity, so some may not be about this drug. \
+Use a record only if its brand/generic name, label text, FAERS drug list, or \
+recall product description names the queried drug; ignore the rest and state \
+how many were excluded as unrelated.
+- Say a boxed warning exists ONLY if a label row is marked HAS BOXED WARNING, \
+and quote only what its excerpt contains.
 - Do NOT give clinical advice. Frame everything as "the FDA records show…".
-- If a section has no source data, write "(no <type> records in the local \
-corpus for this drug)" instead of speculating."""
+- If a section has no relevant source data, write "(no <type> records in the \
+local corpus for this drug)" instead of speculating."""
+
+# Label text is stored once (as embed_text) rather than per-section, and some
+# labels run to 200k+ characters. Hand Claude an excerpt anchored on the SPL
+# section headings so "Headline risks" is grounded in actual label language.
+_LABEL_TEXT_SQL = """
+SELECT doc_id, embed_text
+FROM documents
+WHERE source_id = 'openfda_label' AND doc_id = ANY($1::text[])
+"""
+_BOXED_EXCERPT_CHARS = 700
+_WARNINGS_EXCERPT_CHARS = 1400
 
 
 _client: AsyncAnthropic | None = None
@@ -78,7 +96,22 @@ def _get_client() -> AsyncAnthropic:
 # --- record → prompt-chunk formatters --------------------------------------
 
 
-def _format_label_row(r: Record) -> str:
+def _label_excerpt(text: str, has_boxed_warning: bool) -> str:
+    """Boxed-warning and Warnings-and-Precautions excerpts from stored label text."""
+    parts: list[str] = []
+    if has_boxed_warning and (i := text.find("WARNING:")) >= 0:
+        parts.append("Boxed warning: " + text[i : i + _BOXED_EXCERPT_CHARS])
+    j = text.find("WARNINGS AND PRECAUTIONS")
+    if j < 0:
+        j = text.find("WARNINGS")
+    if j >= 0:
+        parts.append("Warnings: " + text[j : j + _WARNINGS_EXCERPT_CHARS])
+    if not parts and text:
+        parts.append("Label text (start): " + text[:_WARNINGS_EXCERPT_CHARS])
+    return " … ".join(" ".join(p.split()) for p in parts)
+
+
+def _format_label_row(r: Record, text: str = "") -> str:
     s = r["structured"] or {}
     brand = (s.get("brand_name") or [""])[0] if s.get("brand_name") else ""
     generic = (s.get("generic_name") or [""])[0] if s.get("generic_name") else ""
@@ -89,10 +122,12 @@ def _format_label_row(r: Record) -> str:
         flags.append("has warnings")
     flag_str = " | ".join(flags) if flags else "no warnings flags"
     names = f"brand={brand!r} generic={generic!r}" if brand or generic else f"name={r['title']!r}"
+    excerpt = _label_excerpt(text, bool(s.get("has_boxed_warning")))
     return (
         f"- [{r['doc_id']}] {names} "
         f"effective={s.get('effective_time', '?')}  {flag_str}\n"
-        f"  url: {r['url']}"
+        f"  url: {r['url']}\n"
+        f"  excerpt: {excerpt or '(no label text stored)'}"
     )
 
 
@@ -123,6 +158,7 @@ def _format_recall_row(r: Record) -> str:
     return (
         f"- [{r['doc_id']}] {s.get('classification', '?')}  status: {s.get('status', '?')}\n"
         f"  firm: {s.get('recalling_firm', '?')}  report_date: {s.get('report_date', '?')}\n"
+        f"  product: {(s.get('product_description') or '(not stated)')[:300]}\n"
         f"  reason: {(s.get('reason_for_recall') or '')[:200]}"
     )
 
@@ -141,11 +177,17 @@ def _build_prompt(
     labels: list[Record],
     events: list[Record],
     recalls: list[Record],
+    label_texts: dict[str, str] | None = None,
 ) -> str:
+    texts = label_texts or {}
+
+    def label_row(r: Record) -> str:
+        return _format_label_row(r, texts.get(r["doc_id"], ""))
+
     return (
         f"Drug query: {drug_name!r}\n"
         f"Reading level: {reading_level}\n\n"
-        f"{_format_block('LABELS (drug/label)', labels, _format_label_row)}\n"
+        f"{_format_block('LABELS (drug/label)', labels, label_row)}\n"
         f"{_format_block('ADVERSE EVENTS (drug/event / FAERS)', events, _format_event_row)}\n"
         f"{_format_block('RECALLS (drug/enforcement)', recalls, _format_recall_row)}\n"
     )
@@ -205,7 +247,13 @@ async def summarize_safety_profile(
                 )
             ]
 
-        user_prompt = _build_prompt(drug_name, reading_level, labels, events, recalls)
+        label_texts: dict[str, str] = {}
+        if labels:
+            async with pool.acquire() as conn:
+                text_rows = await conn.fetch(_LABEL_TEXT_SQL, [r["doc_id"] for r in labels])
+            label_texts = {t["doc_id"]: t["embed_text"] or "" for t in text_rows}
+
+        user_prompt = _build_prompt(drug_name, reading_level, labels, events, recalls, label_texts)
 
         response = await _get_client().messages.create(
             model=settings.summary_model,

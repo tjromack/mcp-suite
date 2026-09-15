@@ -115,6 +115,47 @@ async def test_synthesizes_from_three_sources_with_one_embedding(
     _patch_anthropic.messages.create.assert_awaited_once()
 
 
+async def test_prompt_is_grounded_in_label_text_and_recall_products(
+    _patch_pool, mock_conn, _patch_embed, _patch_query_documents, _patch_anthropic
+):
+    # Regression: the prompt used to carry only label flags (no text) and recall
+    # reasons without product names, so Claude filled "headline risks" from its
+    # own knowledge and attributed unrelated recalls to the drug.
+    _patch_query_documents.side_effect = [
+        [_row(doc_id="L-1", structured={"brand_name": ["DRUGX"], "has_boxed_warning": True})],
+        [],
+        [
+            _row(
+                doc_id="R-1",
+                structured={
+                    "classification": "Class II",
+                    "product_description": "Heparin Sodium Injection, 1,000 USP units/mL",
+                    "reason_for_recall": "Temperature excursion.",
+                },
+            )
+        ],
+    ]
+    mock_conn.fetch.return_value = [
+        {
+            "doc_id": "L-1",
+            "embed_text": "DRUGX indications ... WARNING: SEVERE LIVER INJURY Monitor LFTs. "
+            "... WARNINGS AND PRECAUTIONS Hepatotoxicity ( 5.1 ) Stop if ALT > 5x ULN.",
+        }
+    ]
+
+    await summarize_safety_profile("drugx", "clinician")
+
+    # Label text fetched for exactly the retrieved label ids.
+    assert mock_conn.fetch.await_args.args[1] == ["L-1"]
+    prompt = _patch_anthropic.messages.create.await_args.kwargs["messages"][0]["content"]
+    assert "Boxed warning: WARNING: SEVERE LIVER INJURY" in prompt
+    assert "Warnings: WARNINGS AND PRECAUTIONS Hepatotoxicity" in prompt
+    assert "product: Heparin Sodium Injection" in prompt
+    system = _patch_anthropic.messages.create.await_args.kwargs["system"]
+    assert "excluded as unrelated" in system
+    assert "HAS BOXED WARNING" in system
+
+
 # --- validation / edge cases ----------------------------------------------
 
 
