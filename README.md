@@ -143,7 +143,7 @@ Clinical trial eligibility criteria are notoriously hard to parse — dense medi
 
 *Claude Desktop calling `semantic_search` → `get_details` → `summarize_eligibility` over the local pgvector dataset and the live ClinicalTrials.gov API.*
 
-> **Caveat:** this clip predates the Phase-A refactor, so it shows the old tool names (`search_trials` / `get_trial_details`). Behaviour is identical and a re-record is queued. For a current, unedited run of all nine tools see [`scripts/demo_tour.py`](scripts/demo_tour.py) — `uv run python scripts/demo_tour.py --pause`.
+> **Caveat:** this clip predates the Phase-A refactor, so it shows the old tool names (`search_trials` / `get_trial_details`). Behaviour is identical and a re-record is queued. For a current, unedited run of all nine tools see [`scripts/demo_tour.py`](scripts/demo_tour.py) — `uv run python scripts/demo_tour.py --pause`. Re-recording it is a documented process: [`docs/RECORDING_DEMO.md`](docs/RECORDING_DEMO.md).
 
 ---
 
