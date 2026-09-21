@@ -74,12 +74,35 @@ _custom = list(_cfg.get("custom_tools", []))
 _connector: Any = None
 
 
+# A missing database must not kill the process. Claude Desktop reports a
+# server that exits during startup as "Connection closed", which tells the user
+# nothing about the actual cause (Postgres not running). Start anyway, then say
+# so in the tool response — and reconnect on a later call once the DB is back,
+# with no client restart.
+_DB_UNAVAILABLE_MESSAGE = (
+    "Database unavailable — this server can't reach its local corpus.\n\n"
+    "Start it with `docker compose up -d` in the mcp-suite repo, then ask again "
+    "(no need to restart your MCP client). Check setup with "
+    "`python -m core.server --selftest`."
+)
+# get_details fetches from the upstream API, so it still works without the DB.
+_DB_OPTIONAL_TOOLS = frozenset({"get_details"})
+
+
 @asynccontextmanager
 async def _lifespan(_server: FastMCP) -> AsyncIterator[None]:
     """Open the pool + instantiate the connector at startup, close on shutdown."""
     global _connector
     logger.info("Initializing DB pool…")
-    await init_pool(settings.database_url)
+    try:
+        await init_pool(settings.database_url)
+    except Exception as exc:  # noqa: BLE001 — degrade, don't die on startup
+        logger.error(
+            "Database unreachable at startup (%s: %s). Serving anyway — tools will "
+            "report it and reconnect automatically once Postgres is up.",
+            type(exc).__name__,
+            exc,
+        )
     _connector = load_connector(SOURCE_ID)
     logger.info(
         "Server up on stdio. source_id=%s  generic_tools=%s  custom_tools=%s",
@@ -105,11 +128,32 @@ mcp = FastMCP(f"mcp-suite:{SOURCE_ID}", lifespan=_lifespan)
 # the underlying work is never started for a denied call.
 
 
+async def _ensure_pool() -> Any | None:
+    """The pool, reconnecting once if startup happened before Postgres was up."""
+    try:
+        return get_pool()
+    except RuntimeError:
+        try:
+            pool = await init_pool(settings.database_url)
+        except Exception as exc:  # noqa: BLE001 — reported to the caller, not raised
+            logger.warning("Database still unavailable (%s: %s)", type(exc).__name__, exc)
+            return None
+        logger.info("Database reconnected.")
+        return pool
+
+
 async def _serve(
     tool_name: str,
     factory: Callable[[], Awaitable[list[TextContent]]],
 ) -> list[TextContent]:
-    decision = await authorize(get_pool(), API_KEY, SOURCE_ID, tool_name)
+    pool = await _ensure_pool()
+    if pool is None:
+        if tool_name not in _DB_OPTIONAL_TOOLS:
+            logger.info("tool=%s source=%s SKIPPED (no database)", tool_name, SOURCE_ID)
+            return [TextContent(type="text", text=_DB_UNAVAILABLE_MESSAGE)]
+        # Live-fetch tool: run it, but gating and metering both need the DB.
+        return await factory()
+    decision = await authorize(pool, API_KEY, SOURCE_ID, tool_name)
     if not decision.allowed:
         logger.info("tool=%s source=%s DENIED (%s)", tool_name, SOURCE_ID, decision.reason)
         await record_tool_call(
