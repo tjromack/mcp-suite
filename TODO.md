@@ -138,3 +138,17 @@ Phases 1–4 below are kept as the build record.
 - [x] **More tools** — `find_similar_trials` (PR #6 `fe4fb6e`); `search_trials` phase/condition/date filters + pagination (PR #7 `5046e88`).
 - [x] **Containerize the MCP server** — Dockerfile + `mcp` Compose service behind a `server` profile + `docker-build` CI job; scoped honestly (stdio server, reproducible-env value). PR #8.
 - [ ] **Larger / themed dataset** — multi-`--query` ingest across disease areas; document corpus composition.
+
+### Retrieval quality — from the 2026-09-21 spot-check
+
+`docs/EVAL_RETRIEVAL.md` scores 20 labelled questions against the clinical corpus
+(hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77) and root-causes the one outright miss.
+
+- [ ] **Add `interventions` to the clinical `embed_fields`.** Trials registered under a
+  development code (`DS-8201a`, `MK-3475`, `AMG 510`) don't match questions that use the
+  generic drug name — DESTINY-Breast03 ranks 28th for "trastuzumab deruxtecan versus
+  T-DM1" while its sibling trial ranks 1st. The synonyms are already in the structured
+  payload. Requires re-embedding the clinical corpus, so it is a deliberate run, not a
+  hotfix. Re-score with `scripts/eval_retrieval.py` after.
+- [ ] Extend the labelled set beyond 20 questions, and beyond the clinical corpus, once
+  the embed-field change lands.

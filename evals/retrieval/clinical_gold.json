@@ -1,0 +1,28 @@
+{
+  "corpus": "clinical",
+  "created": "2026-09-21",
+  "labeler": "repo author",
+  "method": "Each question was written from the trial's registered conditions, interventions and design, phrased the way a clinician or coordinator would ask rather than copying the registry title. The gold answer is one specific NCT ID; a different but clinically reasonable trial ranked first still counts as a miss.",
+  "questions": [
+    {"id": "q01", "question": "adjuvant pembrolizumab after liver resection or ablation for hepatocellular carcinoma", "gold": "NCT03867084"},
+    {"id": "q02", "question": "trastuzumab deruxtecan versus T-DM1 in HER2 positive metastatic breast cancer", "gold": "NCT03529110"},
+    {"id": "q03", "question": "T-DXd for residual invasive disease after neoadjuvant therapy in high risk HER2 positive breast cancer", "gold": "NCT04622319"},
+    {"id": "q04", "question": "durvalumab added to gemcitabine and cisplatin for first line advanced biliary tract cancer", "gold": "NCT03875235"},
+    {"id": "q05", "question": "osimertinib with or without platinum pemetrexed chemotherapy in EGFR mutated lung cancer", "gold": "NCT04035486"},
+    {"id": "q06", "question": "sotorasib compared with docetaxel in KRAS G12C mutated non small cell lung cancer", "gold": "NCT04303780"},
+    {"id": "q07", "question": "nivolumab alone or with ipilimumab versus ipilimumab in untreated advanced melanoma", "gold": "NCT01844505"},
+    {"id": "q08", "question": "perioperative pembrolizumab plus chemotherapy before radical cystectomy for bladder cancer", "gold": "NCT03924856"},
+    {"id": "q09", "question": "tiragolumab anti-TIGIT added to atezolizumab and bevacizumab for untreated liver cancer", "gold": "NCT05904886"},
+    {"id": "q10", "question": "nivolumab then ipilimumab or cabazitaxel in metastatic castration resistant prostate cancer", "gold": "NCT02985957"},
+    {"id": "q11", "question": "olaparib maintenance after platinum chemotherapy in endometrial carcinoma", "gold": "NCT03745950"},
+    {"id": "q12", "question": "PARP inhibitor for recurrent IDH mutant high grade glioma", "gold": "NCT03561870"},
+    {"id": "q13", "question": "repurposed disulfiram with copper alongside alkylating chemotherapy in recurrent glioblastoma", "gold": "NCT02678975"},
+    {"id": "q14", "question": "arginine depleting pegylated enzyme therapy for acute myeloid leukemia", "gold": "NCT01910012"},
+    {"id": "q15", "question": "aurora kinase inhibitor alisertib added to cytarabine and idarubicin induction in AML", "gold": "NCT01779843"},
+    {"id": "q16", "question": "dendritic cell vaccine targeting mutant KRAS in pancreatic ductal adenocarcinoma", "gold": "NCT03592888"},
+    {"id": "q17", "question": "does repeat surgery help at first recurrence of glioblastoma compared with second line therapy alone", "gold": "NCT02394626"},
+    {"id": "q18", "question": "HPV self sampling and triage for cervical cancer screening in women living with HIV in sub-Saharan Africa", "gold": "NCT04401670"},
+    {"id": "q19", "question": "thalidomide for asymptomatic smouldering multiple myeloma before symptoms develop", "gold": "NCT00038233"},
+    {"id": "q20", "question": "pembrolizumab dose finding in children with advanced solid tumours or lymphoma", "gold": "NCT02332668"}
+  ]
+}
