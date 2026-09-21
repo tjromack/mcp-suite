@@ -21,6 +21,7 @@ import logging
 import asyncpg
 from mcp.types import TextContent
 
+from core.config import settings
 from core.embeddings import embed_text, to_vector_literal
 
 logger = logging.getLogger("core.tools.semantic_search")
@@ -71,6 +72,59 @@ ORDER BY score DESC, v.similarity DESC
 LIMIT $5 OFFSET $6
 """
 
+# Lexical-only fallback, used when no VOYAGE_API_KEY is configured (the
+# "try it in five minutes" path — see README §Try it). Same column shape as
+# the hybrid query with `similarity` NULL, so callers/formatters are
+# unchanged; ranking is Postgres full-text `ts_rank` alone. Strictly worse
+# than hybrid — it can only find documents that share literal words with the
+# query — and every response says so.
+#
+# The query is OR-ed rather than AND-ed: `websearch_to_tsquery` requires every
+# term to appear, so a natural-language question ("pembrolizumab liver cancer
+# after surgery") matches nothing. Stemming the text with to_tsvector and
+# re-joining the lexemes with `|` matches documents sharing any term, and
+# ts_rank still floats the ones covering more of them. NULLIF keeps an
+# all-stopword query from raising a tsquery syntax error — it yields NULL,
+# which matches no rows.
+_FTS_ONLY_SQL = """
+WITH q AS (
+    SELECT to_tsquery(
+        'english',
+        NULLIF(
+            (
+                SELECT string_agg(quote_literal(lexeme), ' | ')
+                FROM unnest(tsvector_to_array(to_tsvector('english', $2))) AS lexeme
+            ),
+            ''
+        )
+    ) AS query
+)
+SELECT
+    doc_id,
+    title,
+    url,
+    updated_at,
+    structured,
+    NULL::float8 AS similarity,
+    ts_rank(search_tsv, q.query) AS score
+FROM documents, q
+WHERE source_id = $1
+  AND search_tsv @@ q.query
+ORDER BY score DESC
+LIMIT $3 OFFSET $4
+"""
+
+
+def lexical_only() -> bool:
+    """True when no Voyage key is configured, so queries can't be embedded."""
+    return not settings.voyage_api_key.strip()
+
+
+LEXICAL_ONLY_NOTE = (
+    "(lexical-only: no VOYAGE_API_KEY set, so this ranks by keyword match "
+    "instead of meaning — set a key for hybrid semantic search)"
+)
+
 
 def _format_results(source_id: str, query: str, rows: list[asyncpg.Record]) -> str:
     if not rows:
@@ -79,11 +133,14 @@ def _format_results(source_id: str, query: str, rows: list[asyncpg.Record]) -> s
     lines = [f'Top {len(rows)} {source_id} documents for: "{query}"', ""]
     for i, r in enumerate(rows, 1):
         updated = r["updated_at"].date().isoformat() if r["updated_at"] else "—"
+        sim = r["similarity"]
+        scoring = (
+            f"score={r['score']:.4f} (hybrid)  similarity={sim:.3f}"
+            if sim is not None
+            else f"score={r['score']:.4f} (lexical)"
+        )
         lines.append(
-            f"{i}. [{r['doc_id']}] {r['title']}\n"
-            f"   score={r['score']:.4f} (hybrid)  similarity={r['similarity']:.3f}  "
-            f"updated={updated}\n"
-            f"   {r['url']}"
+            f"{i}. [{r['doc_id']}] {r['title']}\n   {scoring}  updated={updated}\n   {r['url']}"
         )
     return "\n".join(lines)
 
@@ -110,6 +167,12 @@ async def query_documents(
     SQL.
     """
     if vec_literal is None:
+        if lexical_only():
+            # No key → keyword-only. Keeps the demo corpus usable with zero
+            # credentials rather than failing the call outright.
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(_FTS_ONLY_SQL, source_id, query, top_k, offset)
+            return list(rows)
         query_vec = await embed_text(query, input_type="query")
         vec_literal = to_vector_literal(query_vec)
     async with pool.acquire() as conn:
@@ -137,7 +200,10 @@ async def semantic_search(
         offset = max(0, offset)
 
         rows = await query_documents(pool, source_id, query, top_k=top_k, offset=offset)
-        return [TextContent(type="text", text=_format_results(source_id, query, rows))]
+        text = _format_results(source_id, query, rows)
+        if lexical_only():
+            text = text + "\n\n" + LEXICAL_ONLY_NOTE
+        return [TextContent(type="text", text=text)]
     except Exception as exc:  # noqa: BLE001 — tool must not raise out
         logger.exception("semantic_search failed (source_id=%s)", source_id)
         return [

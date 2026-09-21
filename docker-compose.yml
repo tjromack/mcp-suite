@@ -16,6 +16,13 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Five-minute try-it path: on a FRESH volume Postgres runs everything in
+      # this directory in name order, so a clone comes up with the schema and a
+      # 300-document demo corpus already loaded — no ingest, no API keys.
+      # Existing volumes are untouched (the entrypoint skips init when the data
+      # directory is non-empty).
+      - ./core/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./demo/seed/02-demo-corpus.sql.gz:/docker-entrypoint-initdb.d/02-demo-corpus.sql.gz:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ctmcp -d clinical_trials"]
       interval: 5s

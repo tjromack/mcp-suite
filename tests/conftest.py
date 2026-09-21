@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from anthropic.types import TextBlock
 
+from core.config import settings
+
 
 class _AsyncCtx:
     """Generic async context manager — yields a value, swallows nothing."""
@@ -28,6 +30,17 @@ class _AsyncCtx:
 
 # Backwards-compat alias for the earlier name used in this file.
 _AcquireCtx = _AsyncCtx
+
+
+@pytest.fixture(autouse=True)
+def _voyage_key_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit tests exercise the hybrid path by default.
+
+    `semantic_search` falls back to lexical-only ranking when no Voyage key
+    is set, and CI has no key — without this the hybrid assertions would
+    silently test the fallback instead. Tests for the fallback override it.
+    """
+    monkeypatch.setattr(settings, "voyage_api_key", "test-voyage-key")
 
 
 @pytest.fixture

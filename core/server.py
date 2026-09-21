@@ -15,11 +15,13 @@ MCP-visible parameters and obtain the DB pool via ``get_pool()`` internally
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import importlib
 import inspect
 import logging
 import os
+import sys
 import tomllib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -250,8 +252,49 @@ if _custom:
         )(_register_custom(_name, _fn))
 
 
+async def _selftest() -> int:
+    """Answer "did the setup work?" without Claude Desktop in the loop.
+
+    Confirms the DB is reachable, reports what is actually in the corpus, and
+    lists the tools this server would register. Exits non-zero when the corpus
+    is empty so it works as a smoke check in CI or a fresh clone.
+    """
+    print(f"source_id:  {SOURCE_ID}")
+    tools = sorted(t.name for t in await mcp.list_tools())
+    print(f"tools:      {', '.join(tools)}")
+    try:
+        pool = await init_pool(settings.database_url)
+    except Exception as exc:  # noqa: BLE001 — a setup check reports, never traces
+        print(f"\nDatabase:   UNREACHABLE — {type(exc).__name__}: {exc}")
+        print("Is Postgres up? Try: docker compose up -d")
+        return 1
+    try:
+        rows = await pool.fetch(
+            "SELECT source_id, count(*) AS n, max(updated_at)::date AS newest "
+            "FROM documents GROUP BY source_id ORDER BY source_id"
+        )
+        total = sum(r["n"] for r in rows)
+        print(f"\nCorpus ({total} documents):")
+        for r in rows:
+            print(f"  {r['source_id']:<22}{r['n']:>7} docs   newest {r['newest']}")
+        if not total:
+            print("\nEmpty corpus. `docker compose down -v && docker compose up -d`")
+            print("reloads the bundled demo data, or ingest your own: see README §Quick Start.")
+            return 1
+        mine = next((r["n"] for r in rows if r["source_id"] == SOURCE_ID), 0)
+        if not mine:
+            print(f"\nNothing ingested for '{SOURCE_ID}' — its tools will return no results.")
+            return 1
+        print("\nOK — ready for Claude Desktop (README §Try it in five minutes).")
+        return 0
+    finally:
+        await close_pool()
+
+
 def main() -> None:
     """Run the MCP server over stdio (required by Claude Desktop)."""
+    if "--selftest" in sys.argv[1:]:
+        raise SystemExit(asyncio.run(_selftest()))
     try:
         mcp.run(transport="stdio")
     except KeyboardInterrupt:

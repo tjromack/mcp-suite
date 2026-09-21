@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from core.config import settings
 from core.tools.semantic_search import semantic_search
 
 
@@ -76,3 +77,51 @@ async def test_db_error_returned_not_raised(mock_pool, mock_conn, _patch_embed):
     result = await semantic_search(mock_pool, "clinical", "cancer")
     assert "Error running semantic_search" in result[0].text
     assert "connection lost" in result[0].text
+
+
+# --- lexical-only fallback (no VOYAGE_API_KEY) -----------------------------
+# The "try it in five minutes" path: a stranger runs the bundled demo corpus
+# with zero credentials. Queries can't be embedded, so search degrades to
+# Postgres full-text instead of failing.
+
+
+@pytest.fixture
+def _no_voyage_key(monkeypatch):
+    monkeypatch.setattr(settings, "voyage_api_key", "")
+
+
+async def test_lexical_fallback_skips_embedding_and_flags_itself(
+    mock_pool, mock_conn, _patch_embed, _no_voyage_key
+):
+    mock_conn.fetch.return_value = [
+        {
+            "doc_id": "NCT00000002",
+            "title": "A Keyword Trial",
+            "url": "https://clinicaltrials.gov/study/NCT00000002",
+            "updated_at": datetime(2026, 5, 19, tzinfo=UTC),
+            "structured": {},
+            "similarity": None,  # lexical rows carry no cosine similarity
+            "score": 0.0731,
+        }
+    ]
+
+    result = await semantic_search(mock_pool, "clinical", "breast cancer", top_k=5)
+    text = result[0].text
+
+    # No Voyage call at all, and the response says it ranked lexically.
+    _patch_embed.assert_not_awaited()
+    assert "score=0.0731 (lexical)" in text
+    assert "similarity=" not in text
+    assert "no VOYAGE_API_KEY set" in text
+
+    # FTS-only SQL binds (source_id, query, top_k, offset) — no vector literal.
+    args = mock_conn.fetch.await_args.args
+    assert args[1:] == ("clinical", "breast cancer", 5, 0)
+    assert "<=>" not in args[0]
+
+
+async def test_hybrid_path_used_when_key_present(mock_pool, mock_conn, _patch_embed):
+    mock_conn.fetch.return_value = []
+    await semantic_search(mock_pool, "clinical", "breast cancer")
+    _patch_embed.assert_awaited_once()
+    assert "<=>" in mock_conn.fetch.await_args.args[0]
