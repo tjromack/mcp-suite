@@ -12,9 +12,86 @@
 - **openfda_drugsfda** — FDA Drugs@FDA approval history (3 generic tools)
 - **pubmed** — PubMed biomedical literature (3 generic tools + `summarize_evidence` — cited synthesis over abstracts)
 
-226 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
+232 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
 
 📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
+
+**Demonstrates:** packaging curated public data as governed MCP tools an assistant can call, with retrieval scored and limits published.
+
+**Who it's for:** engineers evaluating MCP server design, and anyone who wants clinical-trial / FDA / PubMed lookups inside an assistant. **Not for patient care** — see [Limits](#limits--what-this-does-not-let-you-claim).
+
+---
+
+## Try it in five minutes
+
+A 300-document demo corpus (trials · FDA labels, adverse events, recalls, approvals · PubMed abstracts) ships in this repo and loads itself on first boot. **No ingest, no API keys, no account.**
+
+```bash
+git clone https://github.com/tjromack/mcp-suite.git
+cd mcp-suite
+uv sync
+docker compose up -d        # Postgres + pgvector, schema + demo corpus auto-loaded
+```
+
+Confirm it came up with data — prints the tools this server exposes and what is in the corpus:
+
+```bash
+MCP_SUITE_SOURCE=clinical uv run python -m core.server --selftest
+```
+```powershell
+$env:MCP_SUITE_SOURCE="clinical"; uv run python -m core.server --selftest
+```
+
+Then paste this into your Claude Desktop config — `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) — with the path replaced, and restart Claude Desktop completely (tray icon → Quit, not just closing the window):
+
+```json
+{
+  "mcpServers": {
+    "clinical-trials": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "clinical" }
+    },
+    "fda-drug-labels": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "openfda_label" }
+    },
+    "pubmed": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
+      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "pubmed" }
+    }
+  }
+}
+```
+
+Then ask Claude:
+
+- *"Show me the corpus status"* — document counts and freshness per source
+- *"Find trials of immunotherapy after surgery for liver cancer"*
+- *"Show me trials similar to NCT03867084"*
+- *"What FDA context exists for the drugs in NCT03867084?"* — the cross-source join
+
+**Works with no keys:** `semantic_search` (falls back to keyword ranking and says so in the response), `find_similar` (stored embeddings), `get_details` (live upstream fetch), `corpus_status`.
+**Needs keys:** meaning-based ranking needs `VOYAGE_API_KEY`; the summarizing tools (`summarize_eligibility`, `summarize_safety_profile`, `summarize_evidence`) need `ANTHROPIC_API_KEY`. Both have free tiers — put them in `.env` and restart.
+
+No Claude Desktop? `uv run python scripts/demo_tour.py --pause` walks all nine tools from the terminal.
+
+To swap the demo slice for a full corpus, follow [Quick Start](#quick-start) from step 5.
+
+---
+
+## Limits — what this does not let you claim
+
+- **Not clinical decision support.** Nothing here is a medical device, and none of it is cleared, approved or clinically validated. Not for diagnosis, treatment selection or enrolment decisions. Every FDA and PubMed response carries a disclaimer appended in code, not left to the model.
+- **No PHI, by construction.** The suite holds only public reference data and there is no path for patient data to enter it. Don't paste identifiable patient information into queries either — they reach third-party APIs (Voyage for embeddings, Anthropic for summaries).
+- **The corpus is a scoped subset, not a mirror.** The bundled demo is 300 documents; a full local build is cancer-scoped trials, sampled FDA data and one PubMed topic. A record missing here may still exist upstream.
+- **Retrieval is good, not solved.** On 20 labelled questions: **hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77**, with every miss and a root-caused failure mode published in [`docs/EVAL_RETRIEVAL.md`](docs/EVAL_RETRIEVAL.md).
+- **The summarizing tools can still be wrong.** They are constrained to retrieved records and must cite them, which reduces error rather than eliminating it. Check the cited source.
+- **Freshness is bounded** by the refresh cadence (daily for FAERS, weekly elsewhere) and by when anyone last ran it. `corpus_status` reports each source's real age — trust it over this README.
+- **Upstream behaviour is the upstream's.** ClinicalTrials.gov sits behind Akamai bot protection (hence `curl_cffi` impersonation); openFDA allows 1k requests/day anonymously, 120k with a free key; NCBI allows 3 requests/second, 10 with a key. Transient 5xx responses and timeouts retry three times with 2/5/10s backoff; a 404 means "no result", not a failure. `get_details` caches live fetches for an hour per process. When an upstream is down only `get_details` is affected — local search never touches the network.
+- **Single-node, single-tenant.** One Postgres, stdio transport, no HTTP gateway. The API-key tier gate (`mcp_platform/`) is off by default and is not a substitute for a real authorization layer.
 
 ---
 
@@ -63,7 +140,9 @@ Clinical trial eligibility criteria are notoriously hard to parse — dense medi
 
 ![Clinical-Trial MCP server in Claude Desktop — semantic search, live trial details, and a plain-language eligibility summary](docs/demo.gif)
 
-*Claude Desktop calling `semantic_search` → `get_details` → `summarize_eligibility` over the local pgvector dataset and the live ClinicalTrials.gov API. (Recorded pre-refactor under the old tool names — behaviour is identical.)*
+*Claude Desktop calling `semantic_search` → `get_details` → `summarize_eligibility` over the local pgvector dataset and the live ClinicalTrials.gov API.*
+
+> **Caveat:** this clip predates the Phase-A refactor, so it shows the old tool names (`search_trials` / `get_trial_details`). Behaviour is identical and a re-record is queued. For a current, unedited run of all nine tools see [`scripts/demo_tour.py`](scripts/demo_tour.py) — `uv run python scripts/demo_tour.py --pause`.
 
 ---
 
@@ -301,10 +380,27 @@ The legacy `python -m clinical_trial_mcp.server` entry point still works as a co
 
 ---
 
+## How it's verified
+
+| Check | What it covers | Result |
+|---|---|---|
+| Unit + contract tests | Every tool's input/output shape, and the upstream failure modes this depends on — HTTP 429, 5xx, timeouts, malformed payloads, unreachable DB, empty corpus | 232 passing, 60 of them failure-path |
+| [Retrieval spot-check](docs/EVAL_RETRIEVAL.md) | 20 labelled questions with a known-correct trial, scored against the **full** corpus | hit@1 70% · hit@3 80% · hit@10 95% · MRR 0.77, misses published |
+| Static analysis | `ruff` lint + format, `mypy` over `core`, `servers`, `mcp_platform` | clean |
+| CI | The above on every push | [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml) |
+| End-to-end tour | All 9 tools over real MCP stdio against live data (`scripts/demo_tour.py`) | 14/14 steps |
+
+Re-run the retrieval score yourself: `uv run python scripts/eval_retrieval.py` (needs a
+`VOYAGE_API_KEY` and an ingested corpus). The known failure mode — trials registered under
+a development code rather than a generic drug name — is root-caused in that report, with the
+fix queued in [`TODO.md`](TODO.md) rather than quietly omitted.
+
+---
+
 ## Running Tests
 
 ```bash
-uv run pytest tests/ -v          # 226 tests, fully mocked (no DB/network/keys)
+uv run pytest tests/ -v          # 232 tests, fully mocked (no DB/network/keys)
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 
