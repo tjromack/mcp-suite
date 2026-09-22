@@ -336,7 +336,10 @@ async def _selftest() -> int:
         return 1
     try:
         rows = await pool.fetch(
-            "SELECT source_id, count(*) AS n, max(updated_at)::date AS newest "
+            # Ignore future-dated records (openFDA effective_time, forward-dated
+            # PubMed issues) so "newest" reads as freshness, matching corpus_status.
+            "SELECT source_id, count(*) AS n, "
+            "max(updated_at) FILTER (WHERE updated_at <= now())::date AS newest "
             "FROM documents GROUP BY source_id ORDER BY source_id"
         )
         total = sum(r["n"] for r in rows)
