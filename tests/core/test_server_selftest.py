@@ -78,3 +78,35 @@ async def test_selftest_flags_source_with_no_documents(_pool_with, capsys):
     out = capsys.readouterr().out
     assert code == 1
     assert "Nothing ingested" in out
+
+
+# --- source selection ------------------------------------------------------
+# `--source` exists so one documented command works in bash, PowerShell and
+# cmd.exe, where exporting an env var is three different syntaxes.
+
+
+def test_source_flag_beats_environment(monkeypatch):
+    monkeypatch.setattr(server.sys, "argv", ["core.server", "--selftest", "--source", "pubmed"])
+    monkeypatch.setenv("MCP_SUITE_SOURCE", "clinical")
+    assert server._resolve_source_id() == "pubmed"
+
+
+def test_source_falls_back_to_environment(monkeypatch):
+    monkeypatch.setattr(server.sys, "argv", ["core.server", "--selftest"])
+    monkeypatch.setenv("MCP_SUITE_SOURCE", "openfda_label")
+    assert server._resolve_source_id() == "openfda_label"
+
+
+def test_dangling_source_flag_falls_back(monkeypatch):
+    # `--source` with nothing after it shouldn't IndexError.
+    monkeypatch.setattr(server.sys, "argv", ["core.server", "--source"])
+    monkeypatch.delenv("MCP_SUITE_SOURCE", raising=False)
+    assert server._resolve_source_id() == "clinical"
+
+
+def test_unknown_source_exits_with_the_valid_names(capsys):
+    with pytest.raises(SystemExit) as exc:
+        server._load_server_toml("nope")
+    message = str(exc.value)
+    assert "Unknown source 'nope'" in message
+    assert "clinical" in message and "pubmed" in message  # lists what works

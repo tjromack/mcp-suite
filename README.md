@@ -36,11 +36,11 @@ docker compose up -d        # Postgres + pgvector, schema + demo corpus auto-loa
 Confirm it came up with data — prints the tools this server exposes and what is in the corpus:
 
 ```bash
-MCP_SUITE_SOURCE=clinical uv run python -m core.server --selftest
+uv run python -m core.server --selftest --source clinical
 ```
-```powershell
-$env:MCP_SUITE_SOURCE="clinical"; uv run python -m core.server --selftest
-```
+
+Same command in bash, PowerShell and cmd.exe. (Claude Desktop selects the source with the
+`MCP_SUITE_SOURCE` env var instead, as in the config below.)
 
 Then paste this into your Claude Desktop config — `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) — with the path replaced, and restart Claude Desktop completely (tray icon → Quit, not just closing the window):
 

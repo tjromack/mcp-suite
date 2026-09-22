@@ -51,14 +51,14 @@ docker ps --filter name=clinical_trials_db --format "{{.Names}} {{.Status}}"
 # → clinical_trials_db  Up ... (healthy)    — if missing: docker compose up -d
 
 foreach ($s in 'clinical','openfda_label','openfda_event','openfda_enforcement','openfda_drugsfda','pubmed') {
-  $env:MCP_SUITE_SOURCE = $s
-  "{0,-22}{1}" -f $s, (uv run python -m core.server --selftest | Select-Object -Last 1)
+  "{0,-22}{1}" -f $s, (uv run python -m core.server --selftest --source $s | Select-Object -Last 1)
 }
 # → six "OK - ready for Claude Desktop" lines
 ```
 
-> This loop is PowerShell. The bash form (`for s in … do … done`) fails here with
-> *"Missing statement body in do loop"*. Paste it as one block, not line by line.
+> The loop is PowerShell — paste it as one block. In **cmd.exe** neither `foreach` nor bash's
+> `for … do … done` works; run the single-source command below once per source instead.
+> `--source` avoids env-var syntax entirely, which differs in all three shells.
 
 `.env` needs `ANTHROPIC_API_KEY` and `VOYAGE_API_KEY`, or search prints "lexical-only" on screen and
 the summarizing tools error out.
@@ -92,8 +92,8 @@ rendering. Don't scroll while text streams.
 ```powershell
 docker compose up -d
 ```
-```powershell
-$env:MCP_SUITE_SOURCE = "clinical"; uv run python -m core.server --selftest
+```
+uv run python -m core.server --selftest --source clinical
 ```
 
 Shows the container starting and the selftest printing tools, corpus counts and freshness. This is

@@ -48,7 +48,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("core.server")
 
-SOURCE_ID = os.environ.get("MCP_SUITE_SOURCE", "clinical")
+
+def _resolve_source_id() -> str:
+    """Which source this process serves: `--source <id>` wins, else the env var.
+
+    The flag exists because `MCP_SUITE_SOURCE=x cmd` is bash, `$env:MCP_SUITE_SOURCE="x"; cmd`
+    is PowerShell, and `set MCP_SUITE_SOURCE=x` is cmd.exe — one command that works in all
+    three beats three sets of instructions. Claude Desktop keeps using the env var.
+    """
+    argv = sys.argv[1:]
+    if "--source" in argv:
+        i = argv.index("--source")
+        if i + 1 < len(argv):
+            return argv[i + 1]
+    return os.environ.get("MCP_SUITE_SOURCE", "clinical")
+
+
+SOURCE_ID = _resolve_source_id()
 # Phase H — the API key this process presents to the authorization gate. Like
 # MCP_SUITE_SOURCE, it's per-process for the stdio transport. Only consulted
 # when AUTH_ENABLED=true (otherwise the gate allows everything).
@@ -59,7 +75,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 def _load_server_toml(source_id: str) -> dict[str, Any]:
     path = _REPO_ROOT / "servers" / source_id / "server.toml"
     if not path.exists():
-        raise FileNotFoundError(f"No server.toml for '{source_id}' at {path}")
+        # A mistyped source is a typo, not a crash: name the valid ones and stop
+        # cleanly rather than printing an import-time traceback.
+        available = sorted(p.parent.name for p in (_REPO_ROOT / "servers").glob("*/server.toml"))
+        raise SystemExit(
+            f"Unknown source '{source_id}'. Available: {', '.join(available)}\n"
+            f"Pass one with --source <id>, or set MCP_SUITE_SOURCE."
+        )
     with path.open("rb") as f:
         return tomllib.load(f)
 
