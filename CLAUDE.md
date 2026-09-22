@@ -213,6 +213,15 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy core servers
 
 ---
 
+## Case study voice
+State plainly what the system is, what it does, the decisions made, and what was learned.
+- No disclaimers about the author's experience. Limits belong to the system, stated as scope or cost.
+- No honesty signalling ("the honest version", "published as a loss"). State the number.
+- No apologising for scale. State the numbers and the design target.
+- Real limits, costs, and failures stay — as facts about the system, not confessions.
+
+---
+
 ## Environment Variables
 
 ```
