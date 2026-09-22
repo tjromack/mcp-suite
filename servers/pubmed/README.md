@@ -11,6 +11,16 @@ search — and unlock the "trial/drug → published evidence" cross-server tool.
 | `tools.py` | `summarize_evidence(topic, reading_level, top_k)` — custom LLM tool. ONE hybrid search over the local `pubmed` corpus, one Claude synthesis call, every claim cited to a retrieved PMID, baked-in not-medical-advice disclaimer. |
 | `server.toml` | Declares `source_id`, `embed_fields`, the generic tool list (`semantic_search`/`get_details`/`find_similar`), and `summarize_evidence` as the custom tool. `[connector]` holds the PubMed `term` that scopes the backfill, `page_size`, and optional `max_records`. |
 
+## In action
+
+`summarize_evidence` — a cited synthesis whose sources include the local PubMed PMIDs:
+
+![Claude synthesising pembrolizumab evidence in hepatocellular carcinoma with cited PMIDs and a research-use-only note](../../docs/media/08-cited-synthesis.gif)
+
+`evidence_for_trial` (clinical server) queries this corpus from a trial id:
+
+![Claude retrieving PubMed articles related to trial NCT03867084](../../docs/media/07-evidence.gif)
+
 ## Ingest
 
 ```bash

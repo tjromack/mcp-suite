@@ -17,3 +17,10 @@ the `source_id`.
 > Disclaimer: FAERS reports are unverified, may include duplicates, and do
 > not imply causation. The openFDA `DISCLAIMER` is appended by every tool
 > response from this server family.
+
+## In action
+
+This corpus has no custom tool of its own; its reports surface through the clinical server's `drug_context_for_trial` and the label server's `summarize_safety_profile`:
+
+![Claude joining a trial's drugs to FDA records including FAERS adverse-event reports marked as hospitalizations](../../docs/media/05-cross-source.gif)
+

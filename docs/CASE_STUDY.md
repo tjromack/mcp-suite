@@ -1,7 +1,7 @@
 # mcp-suite — clinical trials, FDA data and literature as tools an assistant can call
 
-Draft for the `/work` tab. Section structure follows the case-study template; media paths assume
-the clips are served from the site's `public/media/`.
+Draft for the `/work` tab, following the case-study template. Image paths are repo-relative here;
+on the site they become `/media/<file>` once `docs/media/` is copied into `public/media/`.
 
 ---
 
@@ -39,14 +39,14 @@ generic tools — `semantic_search`, `find_similar`, `get_details` — come for 
 Search is hybrid: pgvector cosine and Postgres full-text, fused with Reciprocal Rank Fusion. Vector
 alone misses exact identifiers; full-text alone misses paraphrase.
 
-![Claude calling semantic_search for liver-cancer immunotherapy trials and returning ranked NCT ids grouped by trial design](/media/02-search.gif)
+![Claude calling semantic_search for liver-cancer immunotherapy trials and returning ranked NCT ids grouped by trial design](media/02-search.gif)
 
 The payoff of one shared table is the cross-source tools. `drug_context_for_trial` takes a trial's
 interventions and joins them against FDA approvals, labels, adverse-event reports and recalls — as
 SQL, with no model in the path, so the same question returns the same answer. Placebo and other
 non-drug comparators are skipped and reported as skipped.
 
-![Claude joining a trial's drugs to FDA approvals, labels, FAERS reports and recalls, with placebo arms skipped](/media/05-cross-source.gif)
+![Claude joining a trial's drugs to FDA approvals, labels, FAERS reports and recalls, with placebo arms skipped](media/05-cross-source.gif)
 
 **The alternative I rejected:** a database per source, with the assistant fanning out across servers
 and stitching results. It would have been simpler to start and would have made every cross-source
@@ -70,7 +70,7 @@ The retrieval score is scored against the full corpus, not the demo slice, and t
 every miss with what outranked it. `corpus_status` reports each source's size and refresh age, so
 staleness is visible rather than assumed:
 
-![Claude showing corpus status for six sources, flagging that two are 115 days stale](/media/01-corpus-status.gif)
+![Claude showing corpus status for six sources, flagging that two are 115 days stale](media/01-corpus-status.gif)
 
 ## What broke
 

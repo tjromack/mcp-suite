@@ -14,3 +14,10 @@ See [`servers/openfda_label/README.md`](../openfda_label/README.md) for the
 full ingest / Claude-Desktop wiring docs.
 
 > Disclaimer attached by every response.
+
+## In action
+
+Recalls surface through the cross-source tools — here two Class II recalls, one flagged as a compounding pharmacy's product rather than the manufacturer's:
+
+![Claude listing two Class II pembrolizumab-related recalls with their status and origin](../../docs/media/05-cross-source.gif)
+

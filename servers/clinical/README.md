@@ -12,6 +12,16 @@ and ships one custom LLM tool (`summarize_eligibility`).
 | `server.toml` | Declares `source_id`, `embed_fields`, the generic tool roster (`semantic_search` / `get_details` / `find_similar`), and the custom tool list (`summarize_eligibility`). The `[connector]` table holds the connector's init kwargs (queries, page_size, max_per_query). |
 | `PROJECT_QA.md` | What this server is / how it works / why, technical *and* plain-language, with interview pitches. Lifted from the pre-refactor top-level `docs/PROJECT_QA.md` so the clinical-specific Q&A lives next to the clinical code. |
 
+## In action
+
+Plain-language eligibility from the trial's own criteria text:
+
+![Claude turning NCT03867084's inclusion and exclusion criteria into plain-language bullets explaining Child-Pugh class and AFP thresholds](../../docs/media/04-eligibility.gif)
+
+`drug_context_for_trial` — the trial's drugs against FDA approvals, labels, adverse events and recalls, as SQL with no model in the path:
+
+![Claude joining a trial's drugs to two Keytruda BLA approvals, the Qlex label, FAERS reports and two recalls, with placebo skipped](../../docs/media/05-cross-source.gif)
+
 ## Ingest
 
 ```bash

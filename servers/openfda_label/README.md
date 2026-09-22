@@ -10,6 +10,12 @@ joins labels + FAERS + recalls in one Claude call.
 | `tools.py` | `summarize_safety_profile(drug_name, reading_level)` — **cross-source** custom tool. One Voyage query embedding, three pgvector searches (one per openFDA `source_id`), one Claude synthesis call, baked-in FDA disclaimer per plan §7. |
 | `server.toml` | Declares `source_id`, `embed_fields`, the generic tool list (`semantic_search`/`get_details`/`find_similar`), and `summarize_safety_profile` as the custom tool. `[connector]` table holds `page_size` (and optionally `max_records` for capped sanity runs). |
 
+## In action
+
+`summarize_safety_profile` over labels + FAERS + recalls, with label warnings kept separate from unverified reports:
+
+![Claude producing a clinician-level FDA safety profile for pembrolizumab: no boxed warning, immune-mediated reactions, and a FAERS signal table](../../docs/media/06-safety.gif)
+
 ## Ingest
 
 ```bash

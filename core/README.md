@@ -18,3 +18,14 @@ data source — those live under `servers/<vertical>/`.
 
 Populated incrementally during the Phase A refactor; see the plan in
 `elegant-chasing-glade.md` (root of this branch).
+
+## The generic tools in action
+
+Every vertical gets these three for free. Hybrid search (pgvector + full-text, fused with RRF) over the clinical corpus:
+
+![Claude calling semantic_search for liver-cancer immunotherapy trials and returning ranked NCT ids grouped by trial design](../docs/media/02-search.gif)
+
+Nearest neighbours from one document's stored embedding:
+
+![Claude returning trials nearest to NCT03867084 by embedding similarity, grouped by disease stage and study design](../docs/media/03-find-similar.gif)
+

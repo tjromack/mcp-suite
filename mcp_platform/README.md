@@ -13,6 +13,12 @@ product. In-process today (a key is presented via `MCP_SUITE_API_KEY`, like
 | `gate.py` | `authorize(pool, raw_key, source_id, tool_name) -> Decision` — the single allow/deny decision. Tier table (`TIERS`), cross-server-tool set, exempt diagnostics, sha256 `hash_key`. |
 | `keys.py` | API-key lifecycle: `issue` / `list` / `revoke` CLI. Stores only the **sha256 hash**; the raw key is shown once at issuance. Public handle is a 12-char `key_id` (hash prefix). |
 
+## What the meter looks like
+
+`corpus_status` reports per-source size and freshness alongside the 7-day tool-call summary this layer records:
+
+![Claude showing corpus status for six sources with document counts, refresh ages and a seven-day tool-call summary](../docs/media/01-corpus-status.gif)
+
 ## Policy (mirrors `docs/mcp-suite/03-pricing-and-positioning.md` §3)
 
 | Tier | Monthly calls | Cross-server tools |
