@@ -139,11 +139,50 @@ Clinical trial eligibility criteria are notoriously hard to parse — dense medi
 
 ## Demo
 
-![Clinical-Trial MCP server in Claude Desktop — semantic search, live trial details, and a plain-language eligibility summary](docs/demo.gif)
+Recorded in Claude Desktop against the local corpus. Every clip is unedited apart from being
+trimmed and sped up; the tool name and its run time are visible in each one.
 
-*Claude Desktop calling `semantic_search` → `get_details` → `summarize_eligibility` over the local pgvector dataset and the live ClinicalTrials.gov API.*
+**Search by meaning, then pivot to neighbours** — `semantic_search` fuses pgvector similarity with
+Postgres full-text, so the query matches the concept rather than the keywords:
 
-> **Caveat:** this clip predates the Phase-A refactor, so it shows the old tool names (`search_trials` / `get_trial_details`). Behaviour is identical and a re-record is queued. For a current, unedited run of all nine tools see [`scripts/demo_tour.py`](scripts/demo_tour.py) — `uv run python scripts/demo_tour.py --pause`. Re-recording it is a documented process: [`docs/RECORDING_DEMO.md`](docs/RECORDING_DEMO.md).
+![Claude calling the clinical semantic_search tool for liver-cancer immunotherapy trials and returning ranked NCT ids grouped by trial design](docs/media/02-search.gif)
+
+**Dense criteria, rewritten for the person who has to read them** — `summarize_eligibility` sees
+only the criteria retrieved from the corpus, and is instructed not to invent any:
+
+![Claude turning NCT03867084's inclusion and exclusion criteria into plain-language bullets explaining Child-Pugh class and AFP thresholds](docs/media/04-eligibility.gif)
+
+**The join that only exists because the suite shares one table** — `drug_context_for_trial` takes a
+trial's interventions into FDA approvals, labels, adverse events and recalls. No model writes this
+part; placebo arms are skipped and reported as skipped:
+
+![Claude joining NCT03867084's drugs to FDA data: two Keytruda BLA approvals, the Qlex label with no boxed warning, FAERS reports, and two recalls, with placebo skipped](docs/media/05-cross-source.gif)
+
+<details>
+<summary><b>More tools in action</b> — safety profile, trial-to-literature, cited synthesis, corpus status</summary>
+
+**`summarize_safety_profile`** — labels + FAERS + recalls for one drug, with label warnings kept
+separate from unverified reports:
+
+![Claude producing a clinician-level FDA safety profile for pembrolizumab: no boxed warning, immune-mediated reactions, and a FAERS signal table](docs/media/06-safety.gif)
+
+**`evidence_for_trial`** — the trial's own conditions and interventions become a literature query:
+
+![Claude retrieving PubMed articles related to trial NCT03867084](docs/media/07-evidence.gif)
+
+**`summarize_evidence`** — a cited synthesis; the local PubMed PMIDs are listed as sources:
+
+![Claude synthesising pembrolizumab evidence in hepatocellular carcinoma with cited PMIDs and a research-use-only note](docs/media/08-cited-synthesis.gif)
+
+**`find_similar`** — nearest neighbours of one trial's stored embedding:
+
+![Claude returning trials nearest to NCT03867084 by embedding similarity, grouped by disease stage and study design](docs/media/03-find-similar.gif)
+
+</details>
+
+Prefer the terminal? [`scripts/demo_tour.py`](scripts/demo_tour.py) walks all nine tools without
+Claude Desktop: `uv run python scripts/demo_tour.py --pause`. The recording process is documented in
+[`docs/RECORDING_DEMO.md`](docs/RECORDING_DEMO.md).
 
 ---
 
@@ -390,6 +429,11 @@ The legacy `python -m clinical_trial_mcp.server` entry point still works as a co
 | Static analysis | `ruff` lint + format, `mypy` over `core`, `servers`, `mcp_platform` | clean |
 | CI | The above on every push | [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml) |
 | End-to-end tour | All 9 tools over real MCP stdio against live data (`scripts/demo_tour.py`) | 14/14 steps |
+
+`corpus_status` is the diagnostic behind the freshness claim — it reports each source's size, its
+newest record and when it last refreshed, including when that is bad news:
+
+![Claude showing the corpus status table for six sources with document counts and refresh ages, flagging that clinical trials and drug labels are 115 days stale](docs/media/01-corpus-status.gif)
 
 Re-run the retrieval score yourself: `uv run python scripts/eval_retrieval.py` (needs a
 `VOYAGE_API_KEY` and an ingested corpus). The known failure mode — trials registered under

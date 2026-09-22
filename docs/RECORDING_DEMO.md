@@ -217,3 +217,28 @@ Pages, under 10 MB for a GitHub README upload.
 `drug_context_for_trial` <0.1s · `corpus_status` <0.1s · `summarize_eligibility` ~10s ·
 `summarize_safety_profile` ~11s · `summarize_evidence` ~15s. The three summarizing tools are the
 only real pauses — narrate over them, or let them run.*
+
+---
+
+## Appendix — the 2026-09-22 take
+
+`mcp-suite-demo.mkv`, 10:38, 1080p60, silent. Clips in `docs/media/` were cut from it with the
+timings below (source seconds), cropped to `1920x1040` to drop the taskbar, sped up so each clip
+reads in about 15 seconds. Re-cut any of them without re-recording:
+
+| Clip | MP4 window | GIF window (payoff) | Speed |
+|---|---|---|---|
+| `01-corpus-status` | 22–52 | 28–52 | 1.0 / 1.8 |
+| `02-search` | 112–150 | 124–150 | 1.5 / 1.9 |
+| `03-find-similar` | 196–226 | 200–224 | 1.3 / 1.8 |
+| `04-eligibility` | 294–330 | 300–328 | 1.3 / 2.0 |
+| `05-cross-source` | 328–402 | 376–402 | 2.2 / 1.9 |
+| `06-safety` | 412–458 | 430–458 | 1.8 / 2.0 |
+| `07-evidence` | 468–508 | 482–508 | 1.6 / 1.9 |
+| `08-cited-synthesis` | 554–626 | 598–626 | 2.2 / 2.0 |
+
+**Not captured:** `get_details` (the live registry fetch). Eight of the nine tools appear. A 20-second
+take — *"Get the full registry record for NCT03867084"* — closes the gap whenever convenient.
+
+**If a future take is narrated**, keep the audio: this one is silent (mean volume −47 dB), which is
+fine for clips but thin for a standalone video.
