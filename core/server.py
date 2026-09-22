@@ -309,7 +309,7 @@ async def _selftest() -> int:
     try:
         pool = await init_pool(settings.database_url)
     except Exception as exc:  # noqa: BLE001 — a setup check reports, never traces
-        print(f"\nDatabase:   UNREACHABLE — {type(exc).__name__}: {exc}")
+        print(f"\nDatabase:   UNREACHABLE - {type(exc).__name__}: {exc}")
         print("Is Postgres up? Try: docker compose up -d")
         return 1
     try:
@@ -323,13 +323,13 @@ async def _selftest() -> int:
             print(f"  {r['source_id']:<22}{r['n']:>7} docs   newest {r['newest']}")
         if not total:
             print("\nEmpty corpus. `docker compose down -v && docker compose up -d`")
-            print("reloads the bundled demo data, or ingest your own: see README §Quick Start.")
+            print("reloads the bundled demo data, or ingest your own: see README Quick Start.")
             return 1
         mine = next((r["n"] for r in rows if r["source_id"] == SOURCE_ID), 0)
         if not mine:
-            print(f"\nNothing ingested for '{SOURCE_ID}' — its tools will return no results.")
+            print(f"\nNothing ingested for '{SOURCE_ID}' - its tools will return no results.")
             return 1
-        print("\nOK — ready for Claude Desktop (README §Try it in five minutes).")
+        print("\nOK - ready for Claude Desktop (README: Try it in five minutes).")
         return 0
     finally:
         await close_pool()
