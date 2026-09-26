@@ -239,7 +239,7 @@ Run from the mcp-suite repo. Anything not in this table should not appear in the
 | Claim | Value | Verify with |
 |---|---|---|
 | Tests | 309 passing | `uv run python -m pytest tests/ -q` |
-| Contract + failure-path tests | 133 | `uv run python -m pytest tests/ -q -k "retry or timeout or 429 or backoff or malformed or error or fail or unreachable or denied or empty or unavailable or missing or invalid"` |
+| Contract + failure-path tests | 133 | `uv run python -m pytest tests/ -q -k "retry or timeout or 429 or backoff or malformed or error or fail or unreachable or denied or empty or unavailable or missing or invalid or non_json or challenge or contract or schema"` |
 | Retrieval | hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77 | `uv run python scripts/eval_retrieval.py --no-write` (needs `VOYAGE_API_KEY`) |
 | Local corpus | 212,919 documents across 6 sources | `uv run python -m core.server --selftest --source clinical` |
 | Demo corpus | 300 documents, 1.9 MB | `ls -lh demo/seed/02-demo-corpus.sql.gz` |
