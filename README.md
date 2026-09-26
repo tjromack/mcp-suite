@@ -192,44 +192,68 @@ Claude Desktop: `uv run python scripts/demo_tour.py --pause`. The recording proc
 flowchart LR
     client["MCP client<br/>(Claude Desktop / MCP Inspector)"]
 
-    subgraph server["FastMCP server — core/server.py (stdio)"]
+    subgraph server["core/server.py — one stdio process per source_id, wired from server.toml"]
         direction TB
-        lifespan["lifespan:<br/>asyncpg pool + connector"]
-        ss["semantic_search (generic)"]
-        fs["find_similar (generic)"]
-        gd["get_details (generic)"]
-        se["summarize_eligibility (clinical-custom)"]
+        generic["Generic tools, every server<br/>semantic_search · find_similar · get_details · corpus_status"]
+        custom["Custom tools, per vertical<br/>summarize_eligibility · summarize_safety_profile · summarize_evidence"]
+        cross["Cross-source tools, clinical<br/>drug_context_for_trial · evidence_for_trial"]
+        serve["_serve: authorization gate then metering"]
     end
 
-    subgraph ext["External services"]
-        voyage["Voyage AI<br/>embeddings"]
-        anthropic["Anthropic<br/>Claude"]
-        ctgov["ClinicalTrials.gov<br/>v2 API (Akamai)"]
+    pg[("PostgreSQL 16 + pgvector<br/>documents keyed by source_id<br/>source_state · tool_calls · api_keys")]
+
+    subgraph pipeline["Ingest and refresh"]
+        direction TB
+        ingest["core.ingest --source ID"]
+        refresh["core.refresh --due<br/>watermark advances only on success"]
     end
 
-    pg[("PostgreSQL 16<br/>+ pgvector<br/>documents table")]
+    subgraph upstream["Upstream APIs — shared retry policy in core/http_retry.py"]
+        direction TB
+        ctgov["ClinicalTrials.gov v2<br/>curl_cffi browser TLS, Akamai-safe"]
+        openfda["openFDA x4<br/>label · event · enforcement · drugsfda"]
+        ncbi["NCBI E-utilities<br/>esearch then efetch"]
+    end
 
-    client -- "JSON-RPC / stdio" --> server
+    voyage["Voyage voyage-3<br/>1024-dim embeddings"]
+    anthropic["Anthropic Claude Haiku 4.5"]
 
-    ss -- "embed query" --> voyage
-    ss -- "hybrid (cosine + FTS via RRF)" --> pg
-    fs -- "stored-vector KNN" --> pg
-    gd -- "connector.get_raw via<br/>curl_cffi (Akamai-safe)" --> ctgov
-    se -- "read criteria from structured JSONB" --> pg
-    se -- "summarize" --> anthropic
-
-    ingest["python -m core.ingest --source clinical"] -- "paginated fetch" --> ctgov
+    client -- "JSON-RPC over stdio" --> server
+    generic --> serve
+    custom --> serve
+    cross --> serve
+    serve -- "hybrid RRF, vector KNN, SQL joins" --> pg
+    generic -- "embed the query" --> voyage
+    generic -- "get_details: live fetch" --> upstream
+    custom -- "retrieve first, then summarise" --> anthropic
+    ingest -- "paginated fetch" --> upstream
+    refresh -- "incremental fetch since watermark" --> upstream
     ingest -- "batched embed" --> voyage
     ingest -- "upsert ON CONFLICT (source_id, doc_id)" --> pg
+    refresh -- "records run state" --> pg
 ```
 
-**Flow:** an MCP client drives the FastMCP server over stdio. `semantic_search`
-is local-only (Voyage embeds the query, pgvector ranks via RRF over cosine + FTS).
-`get_details` fetches live through the Akamai-safe `curl_cffi` client wrapped
-inside the clinical connector. `summarize_eligibility` reads from the local
-`documents` table and has Claude rewrite the criteria. The generic ingest
-runner populates pgvector ahead of time (one Voyage call per
-batch). Tools never raise — every failure returns `TextContent`.
+**Flow.** Six servers, nine distinct tools, one table. Each vertical implements the
+three-method `DataSource` protocol and declares in its `server.toml` which generic tools to
+expose and which custom ones to import; `core/server.py` reads that file at startup, so a new
+source is configuration rather than code.
+
+Every call goes through `_serve`, which consults the authorization gate (a no-op unless
+`AUTH_ENABLED=true`) and then records a metering row — so `corpus_status` can report real usage.
+Retrieval is local: `semantic_search` embeds the query through Voyage and ranks with Reciprocal
+Rank Fusion over pgvector cosine plus Postgres full-text, and `find_similar` needs no embedding
+call at all. Only `get_details` leaves the machine at query time.
+
+The cross-source tools are the reason the table is shared: `drug_context_for_trial` joins a
+trial's interventions against all four openFDA corpora in SQL with no model involved, and
+`evidence_for_trial` searches the PubMed corpus from a trial id. The three summarising tools
+retrieve first and pass only the retrieved text to Claude.
+
+Ingest and refresh run out of band. `core.refresh` keeps a watermark per source and advances it
+only on success, so a failed window is retried rather than skipped. All three upstream clients
+share one retry policy: 429 and 5xx retry with backoff and honour `Retry-After`, other 4xx do
+not, and a malformed body ends the page instead of raising. Tools never raise — every failure
+returns `TextContent`.
 
 ---
 
@@ -538,8 +562,11 @@ mcp-suite/
 │   ├── embeddings.py                  # Voyage wrapper (embed_text + embed_texts batched)
 │   ├── cache.py                       # process-local TTL cache primitive
 │   ├── config.py                      # pydantic-settings base config
-│   ├── tools/                         # generic semantic_search / get_details / find_similar
+│   ├── http_retry.py                  # one retry policy for all three upstreams (429/5xx/Retry-After)
+│   ├── tools/                         # generic semantic_search / get_details / find_similar / corpus_status
 │   ├── ingest.py                      # generic CLI: python -m core.ingest --source <id>
+│   ├── refresh.py                     # watermark-driven incremental refresh (--source/--all/--due/--full)
+│   ├── metering.py                    # one tool_calls row per invocation, best-effort
 │   └── server.py                      # FastMCP entry point — reads server.toml, registers tools
 │
 ├── servers/                           # one subdir per source_id
@@ -568,10 +595,16 @@ mcp-suite/
 │       ├── tools.py                   # summarize_evidence (cited literature synthesizer)
 │       └── server.toml
 │
+├── demo/seed/                         # 300-document corpus Postgres loads on first boot
+├── evals/retrieval/                   # labelled question set behind docs/EVAL_RETRIEVAL.md
+├── scripts/
+│   ├── demo_tour.py                   # guided run of all nine tools over real MCP stdio
+│   ├── eval_retrieval.py              # scores retrieval, writes docs/EVAL_RETRIEVAL.md
+│   ├── export_demo_corpus.py          # regenerates the bundled demo slice
+│   └── ingest_trials.py               # compat shim → core.ingest --source clinical
 ├── src/clinical_trial_mcp/            # Phase-A compat shims for old entry-point commands
-├── scripts/ingest_trials.py           # compat shim → core.ingest --source clinical
-├── docs/mcp-suite/                    # the strategy docs (canonical copy lives in dev-dashboard)
-└── mcp_platform/                      # placeholder: future gateway/billing/deploy layer
+├── docs/                              # media/ clips, ENGINEERING_NOTES, EVAL_RETRIEVAL, mcp-suite/ strategy
+└── mcp_platform/                      # authorization gate + hashed API-key CLI (off by default)
 ```
 
 ---
