@@ -222,3 +222,70 @@ async def test_fetch_with_no_term_and_no_since_yields_nothing():
     c = PubMedConnector(term="")
     got = [r async for r in c.fetch(None)]
     assert got == []
+
+
+# --- NCBI rate limiting and non-XML/JSON bodies ----------------------------
+# NCBI allows 3 requests/second without a key and answers 429 past that. It
+# also serves an HTML notice at HTTP 200 when overloaded.
+
+import pytest  # noqa: E402
+
+from servers.pubmed import connector as pubmed_mod  # noqa: E402
+from servers.pubmed.connector import _get_with_retry  # noqa: E402
+
+
+@pytest.fixture
+def _no_sleep():
+    with patch.object(pubmed_mod.asyncio, "sleep", new=AsyncMock()) as sleep:
+        yield sleep
+
+
+def _resp(status: int, headers: dict[str, str] | None = None) -> MagicMock:
+    r = MagicMock(name=f"response-{status}")
+    r.status_code = status
+    r.headers = headers or {}
+    r.content = b""
+    r.json.return_value = {}
+    r.raise_for_status = MagicMock()
+    return r
+
+
+async def test_retries_429_then_succeeds(_no_sleep):
+    ok = _resp(200)
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=[_resp(429), ok])
+
+    assert await _get_with_retry(client, "https://eutils.test", {}) is ok
+    assert client.get.await_count == 2
+
+
+async def test_429_honours_retry_after(_no_sleep):
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=[_resp(429, {"retry-after": "20"}), _resp(200)])
+
+    await _get_with_retry(client, "https://eutils.test", {})
+
+    assert _no_sleep.await_args.args[0] == 20.0
+
+
+async def test_other_4xx_is_not_retried(_no_sleep):
+    client = MagicMock()
+    client.get = AsyncMock(return_value=_resp(400))
+
+    result = await _get_with_retry(client, "https://eutils.test", {})
+
+    assert result.status_code == 400
+    assert client.get.await_count == 1
+
+
+async def test_esearch_non_json_body_returns_an_empty_page(_no_sleep):
+    html = _resp(200)
+    html.json.side_effect = ValueError("Expecting value")
+    html.content = b"<html>NCBI is temporarily unavailable</html>"
+    client = MagicMock()
+    client.get = AsyncMock(return_value=html)
+
+    conn = PubMedConnector(term="cancer immunotherapy")
+    idlist, count = await conn._esearch(client, "cancer immunotherapy", retstart=0)
+
+    assert (idlist, count) == ([], 0)  # crawl ends cleanly, no JSONDecodeError

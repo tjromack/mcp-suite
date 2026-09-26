@@ -388,3 +388,78 @@ async def test_get_raw_recovers_from_a_transient_5xx(_no_sleep):
         out = await _Probe().get_raw("P-1")
     assert out == rec
     assert _no_sleep.await_count == 1
+
+
+# --- rate limiting and malformed bodies ------------------------------------
+# openFDA allows 1,000 requests/day anonymously and answers 429 past that, so
+# rate limiting is the likeliest real failure — likelier than the 5xx above.
+
+
+def _resp_status(status: int, headers: dict[str, str] | None = None) -> MagicMock:
+    r = MagicMock(name=f"response-{status}")
+    r.status_code = status
+    r.headers = headers or {}
+    r.json.return_value = {"results": []}
+    r.raise_for_status = MagicMock()
+    return r
+
+
+async def test_retries_429_then_succeeds(_no_sleep):
+    client = _FakeClient(_resp_status(429), _resp(200, [{"probe_id": "1"}]))
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        out = [raw async for raw in _Probe().fetch(since=None)]
+
+    assert out == [{"probe_id": "1"}]
+    assert len(client.calls) == 2  # retried rather than giving up
+
+
+async def test_429_honours_retry_after_header(_no_sleep):
+    # The API asked for 30s; the backoff for attempt 1 is 2s. Respect the ask.
+    client = _FakeClient(_resp_status(429, {"retry-after": "30"}), _resp(200, []))
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        async for _ in _Probe().fetch(since=None):
+            pass
+
+    assert _no_sleep.await_args.args[0] == 30.0
+
+
+async def test_absurd_retry_after_does_not_stall_the_run(_no_sleep):
+    # An hour-long Retry-After is ignored in favour of normal backoff; an
+    # ingest should fail fast rather than sleep through it.
+    client = _FakeClient(_resp_status(429, {"retry-after": "3600"}), _resp(200, []))
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        async for _ in _Probe().fetch(since=None):
+            pass
+
+    assert _no_sleep.await_args.args[0] == 2.0
+
+
+async def test_gives_up_after_the_retry_budget(_no_sleep):
+    client = _FakeClient(*[_resp_status(429) for _ in range(4)])
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        out = [raw async for raw in _Probe().fetch(since=None)]
+
+    assert out == []
+    assert len(client.calls) == 4  # initial + 3 retries, then surfaced
+
+
+async def test_400_is_not_retried():
+    # A bad request is a bug, not weather. Retrying burns the rate budget.
+    client = _FakeClient(_resp_status(400))
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        async for _ in _Probe().fetch(since=None):
+            pass
+
+    assert len(client.calls) == 1
+
+
+async def test_non_json_body_ends_the_page_instead_of_raising():
+    # openFDA sometimes answers 200 with an HTML error page.
+    html = _resp(200)
+    html.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+    html.content = b"<html>service unavailable</html>"
+    client = _FakeClient(html)
+    with patch.object(base_mod.httpx, "AsyncClient", return_value=client):
+        out = [raw async for raw in _Probe().fetch(since=None)]
+
+    assert out == []  # no JSONDecodeError escaping the connector

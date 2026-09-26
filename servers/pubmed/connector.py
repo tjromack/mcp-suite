@@ -38,6 +38,7 @@ import httpx
 
 from core.config import settings
 from core.document import Document
+from core.http_retry import RETRY_DELAYS, delay_for, is_retryable_status, retry_after_seconds
 
 logger = logging.getLogger("servers.pubmed.connector")
 
@@ -57,7 +58,6 @@ _EFETCH_BATCH = 200  # NCBI's recommended efetch id ceiling per request.
 
 # Retry budget for transient errors — identical shape to the openFDA base
 # and PR #10's ctgov client: 3 attempts, growing backoff.
-_RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0, 10.0)
 _RETRYABLE_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
     httpx.TimeoutException,
     httpx.ConnectError,
@@ -87,31 +87,38 @@ async def _get_with_retry(
 ) -> httpx.Response:
     """``client.get`` with backoff on transient failures.
 
-    Retries on transport exceptions in ``_RETRYABLE_TRANSPORT_ERRORS`` and on
-    HTTP 429 (rate-limit) / 5xx. Other responses (2xx, other 4xx) are returned
-    as-is. After the budget is exhausted the last response/exception surfaces.
+    Retries transport exceptions, HTTP 429 (NCBI's rate-limit signal — 3
+    requests/second without a key, 10 with one) and 5xx, honouring any
+    ``Retry-After``. Other responses (2xx, other 4xx) are returned as-is. After
+    the budget is exhausted the last response or exception surfaces.
     """
     last_response: httpx.Response | None = None
     last_error: BaseException | None = None
-    attempts = [0.0, *_RETRY_DELAYS]
 
-    for i, delay in enumerate(attempts):
-        if delay:
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        if attempt:
+            wait = delay_for(
+                attempt,
+                retry_after_seconds(
+                    last_response.headers.get("retry-after") if last_response else None
+                ),
+            )
             logger.warning(
-                "NCBI request retry %d/%d after %.0fs backoff (url=%s)",
-                i,
-                len(_RETRY_DELAYS),
-                delay,
+                "NCBI request retry %d/%d after %.0fs backoff (status=%s url=%s)",
+                attempt,
+                len(RETRY_DELAYS),
+                wait,
+                last_response.status_code if last_response else "transport-error",
                 _redact_url(url),
             )
-            await asyncio.sleep(delay)
+            await asyncio.sleep(wait)
         try:
             resp = await client.get(url, params=params)
         except _RETRYABLE_TRANSPORT_ERRORS as exc:
-            last_error = exc
+            last_error, last_response = exc, None
             continue
-        if resp.status_code == 429 or 500 <= resp.status_code < 600:
-            last_response = resp
+        if is_retryable_status(resp.status_code):
+            last_response, last_error = resp, None
             continue
         return resp
 
@@ -356,7 +363,18 @@ class PubMedConnector:
         )
         resp = await _get_with_retry(client, url, params)
         resp.raise_for_status()
-        result = (resp.json() or {}).get("esearchresult") or {}
+        try:
+            payload = resp.json() or {}
+        except ValueError:
+            # NCBI answers an overloaded moment with an HTML notice at HTTP 200.
+            # An empty page ends the crawl cleanly; a JSONDecodeError would not.
+            logger.warning(
+                "NCBI esearch returned a non-JSON body (%d bytes, url=%s) - treating as empty",
+                len(resp.content),
+                _redact_url(url),
+            )
+            return [], 0
+        result = payload.get("esearchresult") or {}
         idlist = [pmid for pmid in (result.get("idlist") or []) if pmid]
         try:
             count = int(result.get("count", 0))

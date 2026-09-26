@@ -185,3 +185,79 @@ async def test_fetch_studies_page_transparently_retries_on_timeout(_instant_slee
     assert out == {"studies": [{"x": 1}]}
     assert session.get.await_count == 2
     assert _instant_sleep.await_count == 1
+
+
+# --- throttling and Akamai challenge pages ---------------------------------
+# Akamai throttles a long ingest with 429 and answers a blocked request with an
+# HTML challenge at HTTP 200. Neither should kill an 80k-row run silently.
+
+
+def _response(status: int, headers: dict[str, str] | None = None) -> MagicMock:
+    r = MagicMock(name=f"response-{status}")
+    r.status_code = status
+    r.headers = headers or {}
+    r.json.return_value = {"studies": []}
+    r.raise_for_status = MagicMock()
+    return r
+
+
+async def test_retries_429_then_succeeds(_instant_sleep):
+    ok = _response(200)
+    session = MagicMock()
+    session.get = AsyncMock(side_effect=[_response(429), ok])
+
+    result = await _session_get_with_retry(session, "https://example.test")
+
+    assert result is ok
+    assert session.get.await_count == 2
+
+
+async def test_retries_5xx_then_succeeds(_instant_sleep):
+    ok = _response(200)
+    session = MagicMock()
+    session.get = AsyncMock(side_effect=[_response(503), ok])
+
+    assert await _session_get_with_retry(session, "https://example.test") is ok
+    assert session.get.await_count == 2
+
+
+async def test_429_honours_retry_after(_instant_sleep):
+    session = MagicMock()
+    session.get = AsyncMock(side_effect=[_response(429, {"Retry-After": "45"}), _response(200)])
+
+    await _session_get_with_retry(session, "https://example.test")
+
+    assert _instant_sleep.await_args.args[0] == 45.0
+
+
+async def test_404_is_returned_not_retried(_instant_sleep):
+    session = MagicMock()
+    session.get = AsyncMock(return_value=_response(404))
+
+    result = await _session_get_with_retry(session, "https://example.test")
+
+    assert result.status_code == 404
+    assert session.get.await_count == 1  # "no such trial" is an answer
+
+
+async def test_exhausted_budget_surfaces_the_last_response(_instant_sleep):
+    session = MagicMock()
+    session.get = AsyncMock(side_effect=[_response(429) for _ in range(4)])
+
+    result = await _session_get_with_retry(session, "https://example.test")
+
+    assert result.status_code == 429
+    assert session.get.await_count == 4
+
+
+async def test_challenge_page_raises_an_actionable_error(_instant_sleep):
+    html = _response(200, {"Content-Type": "text/html"})
+    html.json.side_effect = ValueError("Expecting value")
+    session = MagicMock()
+    session.get = AsyncMock(return_value=html)
+
+    with patch.object(ctgov, "AsyncSession") as session_cls:
+        session_cls.return_value.__aenter__ = AsyncMock(return_value=session)
+        session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        with pytest.raises(ValueError, match="non-JSON body"):
+            await fetch_study("NCT00000001")

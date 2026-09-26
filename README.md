@@ -12,7 +12,7 @@
 - **openfda_drugsfda** — FDA Drugs@FDA approval history (3 generic tools)
 - **pubmed** — PubMed biomedical literature (3 generic tools + `summarize_evidence` — cited synthesis over abstracts)
 
-237 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
+309 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
 
 📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
@@ -90,7 +90,7 @@ To swap the demo slice for a full corpus, follow [Quick Start](#quick-start) fro
 - **Retrieval is good, not solved.** On 20 labelled questions: **hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77**, with every miss and a root-caused failure mode published in [`docs/EVAL_RETRIEVAL.md`](docs/EVAL_RETRIEVAL.md).
 - **The summarizing tools can still be wrong.** They are constrained to retrieved records and must cite them, which reduces error rather than eliminating it. Check the cited source.
 - **Freshness is bounded** by the refresh cadence (daily for FAERS, weekly elsewhere) and by when anyone last ran it. `corpus_status` reports each source's real age — trust it over this README.
-- **Upstream behaviour is the upstream's.** ClinicalTrials.gov sits behind Akamai bot protection (hence `curl_cffi` impersonation); openFDA allows 1k requests/day anonymously, 120k with a free key; NCBI allows 3 requests/second, 10 with a key. Transient 5xx responses and timeouts retry three times with 2/5/10s backoff; a 404 means "no result", not a failure. `get_details` caches live fetches for an hour per process. When an upstream is down only `get_details` is affected — local search never touches the network.
+- **Upstream behaviour is the upstream's.** ClinicalTrials.gov sits behind Akamai bot protection (hence `curl_cffi` impersonation); openFDA allows 1k requests/day anonymously, 120k with a free key; NCBI allows 3 requests/second, 10 with a key. All three clients share one policy ([`core/http_retry.py`](core/http_retry.py)): HTTP 429, 5xx and transport errors retry three times with 2/5/10s backoff, honouring `Retry-After` up to 60s; other 4xx are not retried, since repeating a bad request only burns the rate budget; a 404 means "no result", not a failure; a non-JSON body (an Akamai challenge page, an NCBI overload notice) ends the page with a logged warning instead of a decode error. `get_details` caches live fetches for an hour per process. When an upstream is down only `get_details` is affected — local search never touches the network.
 - **Postgres down is survivable, not silent.** If the database isn't running the server still starts and each tool says so with the fix (`docker compose up -d`), reconnecting on the next call without a client restart. `get_details` keeps working throughout — it reads from the upstream API, not the local corpus.
 - **Single-node, single-tenant.** One Postgres, stdio transport, no HTTP gateway. The API-key tier gate (`mcp_platform/`) is off by default and is not a substitute for a real authorization layer.
 
@@ -424,7 +424,7 @@ The legacy `python -m clinical_trial_mcp.server` entry point still works as a co
 
 | Check | What it covers | Result |
 |---|---|---|
-| Unit + contract tests | Every tool's input/output shape, and the upstream failure modes this depends on — HTTP 429, 5xx, timeouts, malformed payloads, unreachable DB, empty corpus | 237 passing, 70 of them failure-path |
+| Contract + unit tests | Every tool's registered schema and response shape via `list_tools()`, plus the upstream failure modes this depends on — HTTP 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable DB, empty corpus | 309 passing, 133 of them contract or failure-path |
 | [Retrieval spot-check](docs/EVAL_RETRIEVAL.md) | 20 labelled questions with a known-correct trial, scored against the **full** corpus | hit@1 70% · hit@3 80% · hit@10 95% · MRR 0.77, misses published |
 | Static analysis | `ruff` lint + format, `mypy` over `core`, `servers`, `mcp_platform` | clean |
 | CI | The above on every push | [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml) |
@@ -445,7 +445,7 @@ fix queued in [`TODO.md`](TODO.md) rather than quietly omitted.
 ## Running Tests
 
 ```bash
-uv run pytest tests/ -v          # 237 tests, fully mocked (no DB/network/keys)
+uv run pytest tests/ -v          # 309 tests, fully mocked (no DB/network/keys)
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 

@@ -42,6 +42,7 @@ import httpx
 
 from core.config import settings
 from core.document import Document
+from core.http_retry import RETRY_DELAYS, delay_for, is_retryable_status, retry_after_seconds
 
 logger = logging.getLogger("servers.openfda_shared._base")
 
@@ -58,9 +59,8 @@ HTTP_TIMEOUT_SECONDS = 30.0
 _DEFAULT_PAGE_SIZE = 100
 _OPENFDA_MAX_SKIP = 25_000
 
-# Retry budget for transient errors (transport-level OR HTTP 5xx).
-# Identical shape to PR #10's ctgov retry: 3 attempts, growing backoff.
-_RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0, 10.0)
+# Retry budget and which statuses qualify live in core.http_retry, shared with
+# the CT.gov and NCBI clients so all three agree.
 _RETRYABLE_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
     httpx.TimeoutException,
     httpx.ConnectError,
@@ -90,35 +90,39 @@ async def _get_with_retry(
 ) -> httpx.Response:
     """``client.get(url, params=params)`` with backoff on transient failures.
 
-    Retries on transport-level exceptions in ``_RETRYABLE_TRANSPORT_ERRORS``
-    AND on HTTP 5xx responses (openFDA is a free public API and returns
-    500s as transient signal — see the 2026-05 incident that prompted PR
-    #13). 404 is returned as-is — that's openFDA's "no results" signal.
-    Other 4xx are returned as-is so the caller can decide. After the retry
-    budget is exhausted the last response/exception is surfaced.
+    Retries transport errors, HTTP 429 (openFDA's rate-limit signal — 1,000
+    requests/day anonymously, 120k with a key) and 5xx, honouring any
+    ``Retry-After`` the API sends. 404 is returned as-is: that's openFDA's "no
+    results". Other 4xx are returned so the caller can decide. After the budget
+    is spent the last response or exception is surfaced.
     """
     last_response: httpx.Response | None = None
     last_error: BaseException | None = None
-    attempts = [0.0, *_RETRY_DELAYS]
 
-    for i, delay in enumerate(attempts):
-        if delay:
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        if attempt:
+            wait = delay_for(
+                attempt,
+                retry_after_seconds(
+                    last_response.headers.get("retry-after") if last_response else None
+                ),
+            )
             logger.warning(
-                "openFDA request retry %d/%d after %.0fs backoff (url=%s)",
-                i,
-                len(_RETRY_DELAYS),
-                delay,
+                "openFDA request retry %d/%d after %.0fs backoff (status=%s url=%s)",
+                attempt,
+                len(RETRY_DELAYS),
+                wait,
+                last_response.status_code if last_response else "transport-error",
                 _redact_url(url),
             )
-            await asyncio.sleep(delay)
+            await asyncio.sleep(wait)
         try:
             resp = await client.get(url, params=params)
         except _RETRYABLE_TRANSPORT_ERRORS as exc:
-            last_error = exc
+            last_error, last_response = exc, None
             continue
-        # 5xx — retryable. Anything else (2xx, 4xx including 404) — done.
-        if 500 <= resp.status_code < 600:
-            last_response = resp
+        if is_retryable_status(resp.status_code):
+            last_response, last_error = resp, None
             continue
         return resp
 
@@ -127,6 +131,26 @@ async def _get_with_retry(
         return last_response
     assert last_error is not None
     raise last_error
+
+
+def _payload_or_none(resp: httpx.Response, url: str) -> dict[str, Any] | None:
+    """Decode a response body, or None when it isn't the JSON we were promised.
+
+    openFDA occasionally answers a 200 with an HTML error page. Returning None
+    lets the caller treat it as an empty page rather than raising a
+    ``JSONDecodeError`` out of the middle of an ingest run.
+    """
+    try:
+        payload = resp.json()
+    except ValueError:
+        logger.warning(
+            "openFDA returned a non-JSON body (status=%s, %d bytes, url=%s) - treating as empty",
+            resp.status_code,
+            len(resp.content),
+            _redact_url(url),
+        )
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 # Per plan §7 — disclaimers are non-optional for this server family.
@@ -276,7 +300,9 @@ class OpenFDAConnectorBase(ABC):
                 if resp.status_code == 404:
                     return
                 resp.raise_for_status()
-                payload: dict[str, Any] = resp.json()
+                payload = _payload_or_none(resp, self._endpoint_url)
+                if payload is None:
+                    return
                 results = payload.get("results") or []
                 if not results:
                     return
@@ -304,8 +330,8 @@ class OpenFDAConnectorBase(ABC):
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
-            payload: dict[str, Any] = resp.json()
-            results = payload.get("results") or []
+            payload = _payload_or_none(resp, self._endpoint_url)
+            results = (payload or {}).get("results") or []
             if not results:
                 return None
             return results[0]

@@ -144,11 +144,13 @@ twenty-four tools. The cost is six processes and six connection pools on one mac
 
 | Check | Result |
 |---|---|
-| Unit and contract tests | 241 passing, 70 of them failure-path — HTTP 429s, 5xx, timeouts, malformed payloads, unreachable database, empty corpus |
+| Contract and unit tests | 309 passing, 133 of them contract or failure-path — HTTP 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable database, empty corpus |
 | Retrieval spot-check, 20 labelled questions | hit@1 70%, hit@3 80%, hit@5 85%, hit@10 95%, MRR 0.77 |
 | Clean-clone CI | Every push: `docker compose up`, six servers selftest, a keyless search must return real trials |
 | End-to-end tour | All nine tools over real MCP stdio against live data, 14/14 steps |
 | Static analysis | ruff lint + format, mypy over `core`, `servers`, `mcp_platform` |
+
+Per-tool contract tests drive `list_tools()` for all six servers and assert the registered names, input-schema arguments, read-only annotations and the `list[TextContent]` return — the surface a client actually sees.
 
 The retrieval set is scored against the full 212,919-document corpus, not the demo slice, and the
 report names every miss with what outranked it. The one outright miss is root-caused: DESTINY-Breast03
@@ -225,7 +227,7 @@ in `content.config.ts` yet** — add them there first or the build fails validat
 ```ts
 status: "featured"
 tryIt: { label: "docker compose up", href: "https://github.com/tjromack/mcp-suite#try-it-in-five-minutes", kind: "install" }
-verifiedBy: ["hit@3 80% on 20 labelled questions", "clean-clone CI", "241 tests"]
+verifiedBy: ["hit@3 80% on 20 labelled questions", "clean-clone CI", "309 tests"]
 ```
 
 ---
@@ -236,8 +238,8 @@ Run from the mcp-suite repo. Anything not in this table should not appear in the
 
 | Claim | Value | Verify with |
 |---|---|---|
-| Tests | 241 passing | `uv run python -m pytest tests/ -q` |
-| Failure-path tests | 70 | `uv run python -m pytest tests/ -q -k "retry or timeout or 429 or backoff or malformed or error or fail or unreachable or denied or empty or unavailable or missing or invalid"` |
+| Tests | 309 passing | `uv run python -m pytest tests/ -q` |
+| Contract + failure-path tests | 133 | `uv run python -m pytest tests/ -q -k "retry or timeout or 429 or backoff or malformed or error or fail or unreachable or denied or empty or unavailable or missing or invalid"` |
 | Retrieval | hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77 | `uv run python scripts/eval_retrieval.py --no-write` (needs `VOYAGE_API_KEY`) |
 | Local corpus | 212,919 documents across 6 sources | `uv run python -m core.server --selftest --source clinical` |
 | Demo corpus | 300 documents, 1.9 MB | `ls -lh demo/seed/02-demo-corpus.sql.gz` |

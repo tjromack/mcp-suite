@@ -10,10 +10,11 @@ Do NOT set a custom User-Agent on these calls — Akamai cross-checks the UA
 against the TLS fingerprint, so a non-browser UA re-trips the block.
 
 GET requests transparently retry on transient ``curl_cffi`` ``Timeout`` errors
-(curl code 28) with backoff — Akamai occasionally drops a long-running
-session's TCP after thousands of consecutive requests; a single 30s timeout
-should not kill an 80k-row ingest run. The retry budget is modest (3 attempts,
-2/5/10s backoff); on persistent failure the final exception still surfaces.
+(curl code 28), on HTTP 429 (Akamai throttling a long run) and on 5xx, with
+the shared backoff from ``core.http_retry`` and any ``Retry-After`` the edge
+sends. Akamai occasionally drops a long-running session's TCP after thousands
+of consecutive requests; a single 30s timeout should not kill an 80k-row
+ingest run. On persistent failure the final response or exception surfaces.
 """
 
 from __future__ import annotations
@@ -26,13 +27,13 @@ from curl_cffi.requests import AsyncSession
 from curl_cffi.requests.exceptions import Timeout as CurlTimeout
 
 from core.config import settings
+from core.http_retry import RETRY_DELAYS, delay_for, is_retryable_status, retry_after_seconds
 
 API_BASE_URL = "https://clinicaltrials.gov/api/v2/studies"
 HTTP_TIMEOUT_SECONDS = 30.0
 
 logger = logging.getLogger("servers.clinical.ctgov")
 
-_RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0, 10.0)
 _RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (CurlTimeout,)
 
 
@@ -41,33 +42,64 @@ async def _session_get_with_retry(
     url: str,
     **kwargs: Any,
 ) -> Any:
-    """``session.get(url, **kwargs)`` with backoff on transient timeouts.
+    """``session.get(url, **kwargs)`` with backoff on transient failures.
 
-    Up to 3 retries with delays 2/5/10s. GETs are idempotent here, so the
-    worst case from a retry is a few extra benign API calls. If every
-    attempt times out, the final ``Timeout`` is re-raised so the caller
-    still surfaces real failures.
+    Retries curl timeouts, HTTP 429 and 5xx, honouring ``Retry-After``. GETs are
+    idempotent here, so the worst case from a retry is a few extra benign API
+    calls. When every attempt fails the last response is returned (so the caller
+    still sees the status) or the final ``Timeout`` is re-raised.
     """
     last_error: BaseException | None = None
-    attempts = [0.0, *_RETRY_DELAYS]
-    for i, delay in enumerate(attempts):
-        if delay:
+    last_response: Any | None = None
+
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        if attempt:
+            retry_after = None
+            if last_response is not None:
+                retry_after = retry_after_seconds(last_response.headers.get("Retry-After"))
+            wait = delay_for(attempt, retry_after)
             logger.warning(
-                "CT.gov request retry %d/%d after %.0fs backoff (url=%s)",
-                i,
-                len(_RETRY_DELAYS),
-                delay,
+                "CT.gov request retry %d/%d after %.0fs backoff (status=%s url=%s)",
+                attempt,
+                len(RETRY_DELAYS),
+                wait,
+                last_response.status_code if last_response is not None else "timeout",
                 url,
             )
-            await asyncio.sleep(delay)
+            await asyncio.sleep(wait)
         try:
-            return await session.get(url, **kwargs)
+            response = await session.get(url, **kwargs)
         except _RETRYABLE_ERRORS as exc:
-            last_error = exc
+            last_error, last_response = exc, None
             continue
+        if is_retryable_status(response.status_code):
+            last_response, last_error = response, None
+            continue
+        return response
 
+    if last_response is not None:
+        return last_response
     assert last_error is not None
     raise last_error
+
+
+def _json_or_raise(response: Any, url: str) -> dict[str, Any]:
+    """Decode a CT.gov body, turning a non-JSON payload into a clear error.
+
+    Akamai answers a blocked or throttled request with an HTML challenge page,
+    which is a 200 with a body that is not JSON. Surfacing that as "expected
+    JSON, got text/html" is far more actionable than a JSONDecodeError raised
+    from inside the parser.
+    """
+    try:
+        return response.json()
+    except ValueError as exc:
+        content_type = response.headers.get("Content-Type", "unknown")
+        raise ValueError(
+            f"ClinicalTrials.gov returned a non-JSON body "
+            f"(status={response.status_code}, content-type={content_type}, url={url}). "
+            f"This usually means an Akamai challenge page - check CTGOV_IMPERSONATE."
+        ) from exc
 
 
 def verify_setting() -> bool | str:
@@ -112,7 +144,7 @@ async def fetch_studies_page(
         timeout=HTTP_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    return response.json()
+    return _json_or_raise(response, API_BASE_URL)
 
 
 async def fetch_study(nct_id: str) -> dict[str, Any] | None:
@@ -133,4 +165,4 @@ async def fetch_study(nct_id: str) -> dict[str, Any] | None:
         if response.status_code == 404:
             return None
         response.raise_for_status()
-        return response.json()
+        return _json_or_raise(response, url)

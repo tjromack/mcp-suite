@@ -61,10 +61,12 @@ clone is queryable from `docker compose up -d` with no API keys.
 
 | Check | Result |
 |---|---|
-| Unit and contract tests | 241 passing, 70 of them failure-path (429s, 5xx, timeouts, malformed payloads, unreachable database, empty corpus) |
+| Contract and unit tests | 309 passing, 133 of them contract or failure-path — 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable database, empty corpus |
 | Retrieval spot-check, 20 labelled questions | hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77 — misses published |
 | Clean-clone CI | Every push: `docker compose up`, six servers selftest, a keyless search returns real trials |
 | End-to-end tour | All nine tools over real MCP stdio, 14/14 steps |
+
+Per-tool contract tests drive `list_tools()` for all six servers and assert the registered names, input-schema arguments, read-only annotations and the `list[TextContent]` return — the surface a client actually sees.
 
 The retrieval score is scored against the full corpus, not the demo slice, and the report names
 every miss with what outranked it. `corpus_status` reports each source's size and refresh age, so
@@ -138,5 +140,5 @@ Project card:
 
 ```ts
 tryIt: { label: "Watch it run", href: "/work/mcp-suite#demo", kind: "demo" }
-verifiedBy: ["hit@3 80% on 20 labelled questions", "clean-clone CI", "241 tests"]
+verifiedBy: ["hit@3 80% on 20 labelled questions", "clean-clone CI", "309 tests"]
 ```
