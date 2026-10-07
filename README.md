@@ -12,11 +12,13 @@
 - **openfda_drugsfda** — FDA Drugs@FDA approval history (3 generic tools)
 - **pubmed** — PubMed biomedical literature (3 generic tools + `summarize_evidence` — cited synthesis over abstracts)
 
-309 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
+433 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
+
+Alongside the retrieval layer, [`staging/`](staging/) loads the same upstreams' **relational** files — FAERS quarterly extracts and a pinned AACT archive of ClinicalTrials.gov — into 29.5M rows of joinable tables with declared, proved grain. See [Relational staging](#relational-staging--the-analysis-layer-beside-the-document-store).
 
 📐 **[servers/clinical/PROJECT_QA.md](servers/clinical/PROJECT_QA.md)** — what the clinical server is / how it works / why, technical *and* plain-language, with interview pitches. **[docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md)** — the notable build moments (Akamai bot protection, TLS-intercepting proxy, the honest pgvector finding). Worth reading.
 
-**Demonstrates:** packaging curated public data as governed MCP tools an assistant can call, with retrieval scored and limits published.
+**Demonstrates:** retrieval over a document store with versioned relational staging under it, each gated and published.
 
 **Who it's for:** engineers evaluating MCP server design, and anyone who wants clinical-trial / FDA / PubMed lookups inside an assistant. **Not for patient care** — see [Limits](#limits--what-this-does-not-let-you-claim).
 
@@ -92,6 +94,7 @@ To swap the demo slice for a full corpus, follow [Quick Start](#quick-start) fro
 - **Freshness is bounded** by the refresh cadence (daily for FAERS, weekly elsewhere) and by when anyone last ran it. `corpus_status` reports each source's real age — trust it over this README.
 - **Upstream behaviour is the upstream's.** ClinicalTrials.gov sits behind Akamai bot protection (hence `curl_cffi` impersonation); openFDA allows 1k requests/day anonymously, 120k with a free key; NCBI allows 3 requests/second, 10 with a key. All three clients share one policy ([`core/http_retry.py`](core/http_retry.py)): HTTP 429, 5xx and transport errors retry three times with 2/5/10s backoff, honouring `Retry-After` up to 60s; other 4xx are not retried, since repeating a bad request only burns the rate budget; a 404 means "no result", not a failure; a non-JSON body (an Akamai challenge page, an NCBI overload notice) ends the page with a logged warning instead of a decode error. `get_details` caches live fetches for an hour per process. When an upstream is down only `get_details` is affected — local search never touches the network.
 - **Postgres down is survivable, not silent.** If the database isn't running the server still starts and each tool says so with the fix (`docker compose up -d`), reconnecting on the next call without a client restart. `get_details` keeps working throughout — it reads from the upstream API, not the local corpus.
+- **The staging layer is pinned, not live.** It holds four FAERS quarters and one AACT monthly archive, loaded on demand — it does not refresh itself, and it is not a pharmacovigilance pipeline. FAERS reports are voluntary, unverified and duplicated across reporters; the counts are not incidence rates. `staging.aact_studies` keeps a documented 31 of the upstream's 71 columns.
 - **Single-node, single-tenant.** One Postgres, stdio transport, no HTTP gateway. The API-key tier gate (`mcp_platform/`) is off by default and is not a substitute for a real authorization layer.
 
 ---
@@ -448,11 +451,13 @@ The legacy `python -m clinical_trial_mcp.server` entry point still works as a co
 
 | Check | What it covers | Result |
 |---|---|---|
-| Contract + unit tests | Every tool's registered schema and response shape via `list_tools()`, plus the upstream failure modes this depends on — HTTP 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable DB, empty corpus | 309 passing, 133 of them contract or failure-path |
+| Contract + unit tests | Every tool's registered schema and response shape via `list_tools()`, plus the upstream failure modes this depends on — HTTP 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable DB, empty corpus | 433 passing, 182 of them contract or failure-path |
 | [Retrieval spot-check](docs/EVAL_RETRIEVAL.md) | 20 labelled questions with a known-correct trial, scored against the **full** corpus | hit@1 70% · hit@3 80% · hit@10 95% · MRR 0.77, misses published |
 | Static analysis | `ruff` lint + format, `mypy` over `core`, `servers`, `mcp_platform` | clean |
 | CI | The above on every push | [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml) |
 | End-to-end tour | All 9 tools over real MCP stdio against live data (`scripts/demo_tour.py`) | 14/14 steps |
+| [Staging gates](docs/STAGING.md) | Grain, conservation, dedup, integrity and rejects over 29.5M staged rows — each query returns rows only on failure | 5/5 pass, numbers published |
+| Staging integration tests | The loader, the gates and the report against a real Postgres, not a fake — 8 tests that run in the clean-clone CI job and skip without a database | passing |
 
 `corpus_status` is the diagnostic behind the freshness claim — it reports each source's size, its
 newest record and when it last refreshed, including when that is bad news:
@@ -466,10 +471,69 @@ fix queued in [`TODO.md`](TODO.md) rather than quietly omitted.
 
 ---
 
+## Relational staging — the analysis layer beside the document store
+
+`documents` answers *"what should I cite?"*. It cannot answer *"how many distinct adverse-event
+cases, as opposed to reports?"* — one row per citable record with the detail in JSONB has no grain,
+no joins and no partitions. [`staging/`](staging/) is the other half: the same upstreams'
+**relational** files loaded as real tables, **beside** the document store rather than instead of it.
+
+| | FAERS | AACT |
+|---|---|---|
+| What | FDA adverse-event reports | ClinicalTrials.gov, relationally |
+| Loaded | 7 tables + the withdrawn-case list, 4 quarters (2025Q3–2026Q2) | 5 of 49 tables, one pinned monthly archive |
+| Partition | `quarter` | `snapshot` |
+| Rows | 22,283,492 | 7,214,351 |
+| Transferred | 266 MB | **332 MB of a 2,534 MB archive (13%)** |
+
+```bash
+uv run python -m staging load-faers --quarters 2025Q3,2025Q4,2026Q1,2026Q2
+uv run python -m staging load-aact  --snapshot 2026-10-01
+uv run python -m staging gates          # five gates → docs/STAGING.md
+```
+
+**Only the needed members are transferred.** A zip's directory lives at the end of the file and
+every member is an addressable byte range, so [`staging/remote_zip.py`](staging/remote_zip.py) reads
+AACT's central directory over HTTP `Range` requests and fetches just the five tables this layer
+uses — an eighth of the archive. The same class reads a local file, so `--from-zip` and the tests
+share one code path.
+
+**Nothing is guessed.** FAERS date columns are variable-width: `20250326` is a day, `200906` a month
+with no day, `2009` a year. Padding the missing parts invents values indistinguishable from observed
+ones, so each date lands as `*_raw` + `*_prec` + a real `DATE` populated **only** at day precision.
+
+**Nothing is dropped.** Both upstreams ship unquoted delimited text, so a delimiter inside a
+free-text field widens the row with no escaping to undo it. Those lines go to
+`staging.load_reject` verbatim with their line numbers and are counted, so
+`rows_read = rows_loaded + rows_rejected` holds and is re-checked from the database.
+
+Three findings the gates produced, all published with their numbers in
+[`docs/STAGING.md`](docs/STAGING.md):
+
+- **FAERS child tables have no unique key.** `(primaryid, drug_seq)` is a *join* key, not an
+  identity — one case's `drug_seq` 1 arrives up to 103 times, one row per reported manufacturing lot.
+  Counting rows after that join counts lot reports, not drugs. The gate measures the fan-out instead
+  of pretending the key is unique.
+- **Case versions inflate the raw extract.** 1,643,483 report rows resolve to 1,533,690 distinct
+  cases; 109,796 are superseded amendments and 4,153 cases were later withdrawn by the FDA. Counting
+  rows over-reports adverse-event activity by 1.07×.
+- **Every orphan traces to a rejected parent.** An unescaped `|` in a study title rejects that
+  study, and its sponsors, conditions, interventions and sites are orphaned by exactly that study —
+  same keys, same count. The integrity gate reconciles the two and fails only on orphans the reject
+  lane cannot explain.
+
+**What this is not:** a pharmacovigilance pipeline. FAERS reports are voluntary, unverified and
+duplicated across reporters; a case being present says someone reported it, not that a drug caused
+anything. Nothing here computes a disproportionality statistic and the counts are not incidence
+rates.
+
+---
+
 ## Running Tests
 
 ```bash
-uv run pytest tests/ -v          # 309 tests, fully mocked (no DB/network/keys)
+uv run pytest tests/ -v          # fully mocked (no DB/network/keys) — the staging
+                                 # integration tests skip unless Postgres is up
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 
@@ -594,6 +658,17 @@ mcp-suite/
 │       ├── connector.py               # PubMedConnector(DataSource) — esearch→efetch, stdlib XML
 │       ├── tools.py                   # summarize_evidence (cited literature synthesizer)
 │       └── server.toml
+│
+├── staging/                           # relational layer BESIDE documents — analysis, not retrieval
+│   ├── schema.sql                     # staging.faers_* · staging.aact_* · load_run · load_reject
+│   ├── remote_zip.py                  # ranged-HTTP zip reader — pulls 5 members from a 2.5 GB archive
+│   ├── delimited.py                   # line → row or reject, never neither
+│   ├── dates.py                       # FAERS partial dates: raw + precision, never padded
+│   ├── loader.py                      # COPY + reject capture + per-partition transactions
+│   ├── faers.py                       # 7 quarterly tables + withdrawn cases + case-version dedup
+│   ├── aact.py                        # 5 tables from the pinned monthly ClinicalTrials.gov archive
+│   ├── gates.py · report.py           # five gates → docs/STAGING.md
+│   └── __main__.py                    # python -m staging {schema,load-faers,load-aact,dedup,gates}
 │
 ├── demo/seed/                         # 300-document corpus Postgres loads on first boot
 ├── evals/retrieval/                   # labelled question set behind docs/EVAL_RETRIEVAL.md

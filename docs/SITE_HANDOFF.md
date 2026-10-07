@@ -11,10 +11,10 @@ Validated against the site's `src/content.config.ts` schema and `_template.mdx` 
 ```yaml
 ---
 title: mcp-suite
-summary: Six MCP servers that put clinical trials, FDA drug data and PubMed
-  literature inside Claude as callable tools, with retrieval scored against a
-  labelled set rather than eyeballed.
-date: 2026-09-22
+summary: Six MCP servers putting clinical trials, FDA drug data and PubMed
+  literature inside Claude as callable tools, over a document store for
+  retrieval and 29.5M rows of staged relational tables for analysis.
+date: 2026-10-07
 tech:
   - python
   - postgresql
@@ -25,8 +25,8 @@ tech:
 lenses:
   - applied-ai
   - data-engineering
-demonstrates: Cross-source joins over one canonical table, with retrieval
-  scored and its misses published.
+demonstrates: Retrieval over a document store with versioned relational
+  staging under it, each gated and published.
 featured: false
 order: 10
 draft: true
@@ -34,7 +34,7 @@ repo: "https://github.com/tjromack/mcp-suite"
 ---
 ```
 
-Schema notes: `summary` ≤ 180 chars (this is 178 — close to the cap, so edit carefully), `demonstrates` 20–120 (this is 92), `tech` max 6,
+Schema notes: `summary` ≤ 180 chars (this is 176 — close to the cap, so edit carefully), `demonstrates` 20–120 (this is 101), `tech` max 6,
 `lenses` max 3 with the first as primary. No `demo:` — there is no hosted instance, and the schema
 would rather have the field absent than a 404. If you set `cover:`, `coverAlt:` becomes required;
 `docs/media/05-cross-source.jpg` is the strongest single still.
@@ -93,6 +93,10 @@ flowchart LR
   X --> SRV
   L --> SRV
   SRV --> CD["Claude Desktop"]
+  FZ["FAERS quarterly ASCII<br/>4 quarters"] --> STG["staging loaders<br/>ranged-zip reader"]
+  AZ["AACT monthly archive<br/>5 of 49 tables"] --> STG
+  STG --> SDB[("staging.* — 14 tables<br/>29.5M rows, partitioned")]
+  SDB --> GT["5 gates → docs/STAGING.md"]
 ```
 
 Walkthrough: each connector implements a three-method `DataSource` protocol (`fetch`, `normalize`,
@@ -106,6 +110,15 @@ through one choke point that applies the authorization gate and records a meteri
 Search is hybrid: pgvector cosine and Postgres full-text (`websearch_to_tsquery`), fused with
 Reciprocal Rank Fusion. Vector alone misses exact identifiers; full-text alone misses paraphrase.
 
+**The second branch of the diagram is the analysis half.** `documents` answers "what should I
+cite?"; it cannot answer "how many distinct adverse-event cases, as opposed to reports?", because
+one embedded row per citable record has no grain and nothing joins. The `staging/` package loads the
+same upstreams' *relational* files into real tables beside it: four quarterly FAERS extracts (all
+seven tables plus the FDA's withdrawn-case list, with case-version dedup) and five tables from a
+pinned monthly AACT archive of ClinicalTrials.gov. Every table carries its partition column first,
+so re-loading a quarter replaces that quarter and nothing else, and every table has a declared grain
+that a gate proves.
+
 ### Key decisions
 
 Written in the template's required shape.
@@ -115,6 +128,24 @@ questions cross sources — a trial's drug against its FDA label, adverse events
 those are a single SQL join only if the rows live together. The cost is a canonical schema every
 connector must map into, and per-source detail has to survive as a JSON `structured` payload rather
 than typed columns. That mapping is most of the per-vertical work.
+
+**Chose a relational staging layer beside `documents`, not instead of it.** Because the two shapes
+answer different questions and neither subsumes the other: retrieval wants one embedded row per
+citable thing, analysis wants keys, partitions and joins. The cost is a second copy of overlapping
+data and a second load path to maintain. Would switch if the staged tables started serving the MCP
+tools directly, at which point the duplication stops paying for itself.
+
+**Chose to keep FAERS partial dates rather than pad them to a `DATE`.** Because `200906` is a month
+and padding it to 2009-06-01 invents a day that nothing downstream can distinguish from an observed
+one. Each date lands as `*_raw` + `*_prec` + a real `DATE` only at day precision. The cost is three
+columns instead of one and a filter in every date query. It is not a marginal case: 26.8% of therapy
+start dates would have been fabricated.
+
+**Chose to read AACT's archive over HTTP range requests.** Because the archive is 2.5 GB and this
+layer needs five of its 49 members. The zip directory lives at the end of the file and every member
+is an addressable byte range, so the loader fetches 332 MB instead of 2,534 MB. The cost is ~150
+lines of zip-format parsing rather than a `zipfile` call; the same class reads local files, so there
+is one code path.
 
 **Chose deterministic SQL over LLM synthesis for the cross-source join.** Because the same question
 should return the same answer, and a reader needs to see which records matched rather than trust a
@@ -144,11 +175,13 @@ twenty-four tools. The cost is six processes and six connection pools on one mac
 
 | Check | Result |
 |---|---|
-| Contract and unit tests | 309 passing, 133 of them contract or failure-path — HTTP 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable database, empty corpus |
+| Contract and unit tests | 433 passing, 182 of them contract or failure-path — HTTP 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable database, empty corpus |
 | Retrieval spot-check, 20 labelled questions | hit@1 70%, hit@3 80%, hit@5 85%, hit@10 95%, MRR 0.77 |
 | Clean-clone CI | Every push: `docker compose up`, six servers selftest, a keyless search must return real trials |
 | End-to-end tour | All nine tools over real MCP stdio against live data, 14/14 steps |
-| Static analysis | ruff lint + format, mypy over `core`, `servers`, `mcp_platform` |
+| Staging gates | grain, conservation, dedup, integrity, rejects — 5/5 pass over 31,031,531 rows checked, every number published in `docs/STAGING.md` |
+| Staging integration tests | loader, gates and report against a real Postgres rather than a fake — 8 tests, run in the clean-clone CI job, skipped without a database |
+| Static analysis | ruff lint + format, mypy over `core`, `servers`, `staging`, `mcp_platform` |
 
 Per-tool contract tests drive `list_tools()` for all six servers and assert the registered names, input-schema arguments, read-only annotations and the `list[TextContent]` return — the surface a client actually sees.
 
@@ -159,6 +192,19 @@ for a question using the generic name while its sibling trial ranks first.
 
 Worth stating plainly in the write-up: the questions were written by the person who built the corpus,
 and twenty items is a spot-check. Both facts are in the published report.
+
+Each staging gate is written so that a clean database returns no rows — the pass condition is an
+empty result, and the row count beside it proves the gate had data to look at. Two of them found
+real things rather than confirming expectations, and that is the material worth using:
+
+- The **grain** gate disproved the declared key of the FAERS drug table. 7,294,235 rows carry only
+  6,569,196 distinct `(primaryid, drug_seq)` keys, with 103 rows on the worst one — the same drug
+  differing only in the reported manufacturing lot. It is a join key, not an identity, and counting
+  rows after that join counts lot reports rather than drugs.
+- The **integrity** gate found 857 orphaned AACT child rows, and the reject lane accounts for all
+  857: 62 study rows were rejected because an unescaped `|` inside an official title widened them,
+  and those are exactly the 62 studies whose sponsors, conditions, interventions and sites are
+  orphaned. Two independent checks landing on the same 62 records is the evidence that both work.
 
 ### What I'd do differently
 
@@ -227,8 +273,12 @@ in `content.config.ts` yet** — add them there first or the build fails validat
 ```ts
 status: "featured"
 tryIt: { label: "docker compose up", href: "https://github.com/tjromack/mcp-suite#try-it-in-five-minutes", kind: "install" }
-verifiedBy: ["hit@3 80% on 20 labelled questions", "clean-clone CI", "309 tests"]
+verifiedBy: ["hit@3 80% on 20 labelled questions", "5/5 staging gates over 31M rows", "clean-clone CI", "433 tests"]
 ```
+
+The `demonstrates` line now names **both halves** deliberately: the retrieval layer and the
+relational staging under it. Earlier copy that says only "cross-source joins over one canonical
+table" describes half the project.
 
 ---
 
@@ -238,14 +288,24 @@ Run from the mcp-suite repo. Anything not in this table should not appear in the
 
 | Claim | Value | Verify with |
 |---|---|---|
-| Tests | 309 passing | `uv run python -m pytest tests/ -q` |
-| Contract + failure-path tests | 133 | `uv run python -m pytest tests/ -q -k "retry or timeout or 429 or backoff or malformed or error or fail or unreachable or denied or empty or unavailable or missing or invalid or non_json or challenge or contract or schema"` |
+| Tests | 433 passing (8 need Postgres and skip without it) | `uv run python -m pytest tests/ -q` |
+| Contract + failure-path tests | 182 | `uv run python -m pytest tests/ -q --collect-only -k "retry or timeout or 429 or backoff or malformed or error or fail or unreachable or denied or empty or unavailable or missing or invalid or non_json or challenge or contract or schema or reject or orphan or duplicate or conflict or quadratic or stale or abandoned"` |
 | Retrieval | hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77 | `uv run python scripts/eval_retrieval.py --no-write` (needs `VOYAGE_API_KEY`) |
 | Local corpus | 212,919 documents across 6 sources | `uv run python -m core.server --selftest --source clinical` |
 | Demo corpus | 300 documents, 1.9 MB | `ls -lh demo/seed/02-demo-corpus.sql.gz` |
 | Servers / tools | 6 servers, 9 distinct tools | `servers/*/server.toml` |
 | End-to-end tour | 14/14 steps, 9 tools, 6 servers | `uv run python scripts/demo_tour.py` |
 | Missed trial rank | DESTINY-Breast03 at rank 28 | `docs/EVAL_RETRIEVAL.md` error-analysis section |
+| Staged rows | 29,497,843 across 14 tables | `docs/STAGING.md` "What is loaded" |
+| Staging gates | 5/5 pass over 31,031,531 rows checked | `uv run python -m staging gates` |
+| FAERS loaded | 4 quarters, 2025Q3–2026Q2, 22,283,492 rows | `docs/STAGING.md` |
+| FAERS case dedup | 1,643,483 report rows → 1,533,688 cases (1.07× inflation), 4,152 FDA-withdrawn | `docs/STAGING.md` dedup section |
+| AACT loaded | 2026-10-01 snapshot, 5 tables, 7,214,351 rows | `docs/STAGING.md` |
+| AACT transfer saving | 332 MB fetched of a 2,534 MB archive (13%) | the `load-aact` run log, or `staging.load_run.bytes_fetched` |
+| Rejected rows | 2,046 unparseable lines kept and counted, 0.053% worst case | `docs/STAGING.md` rejects section |
+| Orphan reconciliation | 857 orphans, 857 explained by 62 rejected studies, 0 unexplained | `docs/STAGING.md` integrity section |
+| FAERS drug fan-out | 1.11× overall, 103 rows on the worst key | `docs/STAGING.md` grain proof |
+| Partial dates | 26.8% of therapy start dates are not day-precision | `docs/STAGING.md` partial-dates section |
 
 ---
 
@@ -259,6 +319,15 @@ Run from the mcp-suite repo. Anything not in this table should not appear in the
   n=20.
 - **Don't describe the cross-source join as AI.** It is SQL. That is the point of it.
 - **Don't imply a hosted demo.** The try-it path is local: `docker compose up -d`.
+- **Don't call the staging layer a pharmacovigilance pipeline.** It loads FAERS and computes
+  nothing about causality — no disproportionality statistic, no incidence rate. FAERS reports are
+  voluntary, unverified and duplicated across reporters, and the repo says so everywhere it says
+  anything about FAERS.
+- **Don't say the staging layer is live or refreshed.** It is pinned: four named FAERS quarters and
+  one named AACT snapshot, loaded on demand. The retrieval corpus has a refresh pipeline; this does
+  not.
+- **Don't quote staged row counts as "all of FAERS" or "all of AACT".** It is four quarters of one
+  and five of 49 tables from one month of the other.
 
 ---
 

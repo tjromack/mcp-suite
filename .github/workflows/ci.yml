@@ -83,6 +83,18 @@ jobs:
             MCP_SUITE_SOURCE=$source uv run python -m core.server --selftest
           done
 
+      - name: Staging integration tests (these need a real Postgres)
+        # The rest of the suite runs against fakes. These do not, on purpose:
+        # the staging loader's first live bug was asyncpg inferring a bound
+        # parameter's type from its cast, which no fake connection can model.
+        # They skip silently in the `test` job, where there is no database.
+        run: uv run pytest tests/staging/test_integration.py -q
+
+      - name: Staging gates run against the empty schema
+        # Proves the DDL from the container entrypoint matches what the gates
+        # query — a column renamed in one and not the other fails here.
+        run: uv run python -m staging gates --no-write
+
       - name: Search the demo corpus without any API key
         run: |
           uv run python - <<'PY'

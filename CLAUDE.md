@@ -35,6 +35,22 @@ Two server families are shipped:
 
 **Cross-cutting infra:** `core/refresh.py` (Phase F) runs watermark-driven incremental refresh per source (`--source`/`--all`/`--due`/`--full`), tracking state in the `source_state` table and reading each server.toml's `[refresh] cadence`. `core/metering.py` (Phase G) records one `tool_calls` row per MCP tool invocation (best-effort, never breaks a tool); every server exposes a `corpus_status` diagnostic (`core/tools/corpus_status.py`) reporting per-source size/freshness + 7-day usage. `mcp_platform/` (Phase H) is the authorization gate: `gate.authorize()` enforces API-key tiers (free/pro/suite/enterprise) — monthly call cap (from the `tool_calls` meter) + cross-server-tool gating — and `keys.py` is the issue/list/revoke CLI (hashed storage). Off by default (`AUTH_ENABLED=false`). In `core/server.py`, **every** tool routes through `_serve(tool_name, factory)` (gate → meter); custom tools are wrapped by `_register_custom` (signature-preserving for FastMCP schema inference). The key is presented per-process via `MCP_SUITE_API_KEY`.
 
+**Relational staging (`staging/`):** the `documents` table is the retrieval
+layer; `staging/` is the analysis layer beside it. It loads the same upstreams'
+*relational* files — four quarterly FAERS ASCII extracts (all seven tables, plus
+the FDA's withdrawn-case list, with case-version dedup) and five tables from a
+pinned monthly AACT archive of ClinicalTrials.gov — into real tables with
+declared, proved grain. Three rules hold throughout: partition first (`quarter`
+/ `snapshot`, so a re-load replaces one partition and nothing else), nothing
+dropped (unparseable lines go to `staging.load_reject` with their line numbers
+and are counted), nothing guessed (FAERS partial dates keep `*_raw` + `*_prec`
+and get a real `DATE` only at day precision). Five gates — grain, conservation,
+dedup, integrity, rejects — each return rows only on failure and publish their
+numbers to `docs/STAGING.md` via `python -m staging gates`. AACT's archive is
+2.5 GB and only five of its 49 members are needed, so `staging/remote_zip.py`
+reads the zip's central directory over HTTP range requests and fetches just
+those members.
+
 This is a portfolio project demonstrating: MCP server authoring, pgvector
 semantic search against real NLP-heavy data, LLM-assisted text processing,
 and (post-A) a re-usable architectural template for adding new verticals.
@@ -61,81 +77,111 @@ and (post-A) a re-usable architectural template for adding new verticals.
 ## Project Structure
 
 ```
-clinical-trial-mcp/
-├── CLAUDE.md
-├── README.md
-├── TODO.md
-├── PROMPT.md
+mcp-suite/
+├── CLAUDE.md · README.md · TODO.md · PROMPT.md
 ├── pyproject.toml          # uv-managed project + dependencies
 ├── .env.example            # all required env vars with comments
-├── .env                    # NOT committed
-├── .gitignore
-├── docker-compose.yml      # Postgres + pgvector container
+├── docker-compose.yml      # Postgres + pgvector; seeds schema + demo corpus on first boot
 │
-├── src/
-│   └── clinical_trial_mcp/
-│       ├── __init__.py        # registers truststore (OS cert store) on import
-│       ├── __main__.py        # `python -m clinical_trial_mcp` → server.main()
-│       ├── server.py          # FastMCP server; lifespan pool mgmt; registers tools
-│       ├── ctgov.py           # shared curl_cffi ClinicalTrials.gov client (Akamai-safe)
-│       ├── tools/
-│       │   ├── __init__.py
-│       │   ├── search_trials.py       # hybrid vector+FTS search via RRF (local only)
-│       │   ├── get_trial_details.py   # live ClinicalTrials.gov fetch via ctgov.py
-│       │   └── summarize_eligibility.py  # Claude eligibility summarization
-│       ├── db/
-│       │   ├── __init__.py
-│       │   ├── connection.py   # asyncpg pool setup
-│       │   └── schema.sql      # CREATE TABLE + pgvector index DDL
-│       ├── embeddings.py       # Voyage AI embedding wrapper + to_vector_literal()
-│       └── config.py           # pydantic-settings config object
+├── core/                   # shared, source-agnostic machinery
+│   ├── __init__.py         # registers truststore (OS cert store) on import
+│   ├── config.py           # pydantic-settings
+│   ├── connector.py        # the DataSource Protocol every server implements
+│   ├── document.py         # the canonical Document model
+│   ├── embeddings.py       # Voyage wrapper + to_vector_literal()
+│   ├── http_retry.py       # one 429/5xx/Retry-After policy for every upstream
+│   ├── ingest.py           # generic fetch→normalize→embed→upsert runner
+│   ├── refresh.py          # watermark-driven incremental refresh (Phase F)
+│   ├── metering.py         # one tool_calls row per invocation (Phase G)
+│   ├── server.py           # FastMCP server; _serve() = gate → meter → tool
+│   ├── store/
+│   │   ├── connection.py   # asyncpg pool + json/jsonb codecs
+│   │   └── schema.sql      # documents · source_state · tool_calls · api_keys
+│   └── tools/              # the generic tools, parameterized by source_id
+│       ├── semantic_search.py   # hybrid vector+FTS via RRF (local only)
+│       ├── find_similar.py
+│       ├── get_details.py       # live upstream fetch, TTL-cached
+│       └── corpus_status.py     # per-source size / freshness / usage diagnostic
 │
-├── scripts/
-│   └── ingest_trials.py    # fetch N trials from ClinicalTrials.gov, embed, store
+├── servers/                # one directory per source_id — connector + server.toml (+ tools)
+│   ├── clinical/           # connector.py · ctgov.py · tools.py · server.toml
+│   ├── openfda_label/ · openfda_event/ · openfda_enforcement/ · openfda_drugsfda/
+│   ├── openfda_shared/_base.py   # the shared openFDA client
+│   └── pubmed/
 │
-└── tests/
-    ├── conftest.py
-    ├── test_search_trials.py
-    ├── test_get_trial_details.py
-    └── test_summarize_eligibility.py
+├── staging/                # relational layer BESIDE documents — analysis, not retrieval
+│   ├── schema.sql          # staging.faers_* · staging.aact_* · load_run · load_reject
+│   ├── remote_zip.py       # ranged-HTTP zip member reader
+│   ├── delimited.py · dates.py · loader.py
+│   ├── faers.py · aact.py  # per-source specs, row builders, case-version dedup
+│   ├── gates.py · report.py  # the five gates → docs/STAGING.md
+│   └── __main__.py         # python -m staging {schema,load-faers,load-aact,dedup,gates}
+│
+├── mcp_platform/           # Phase H: gate.py (tiers) · keys.py (issue/list/revoke)
+├── demo/seed/              # 300-doc corpus, loaded on first container boot
+├── evals/retrieval/        # labelled gold set behind docs/EVAL_RETRIEVAL.md
+├── scripts/                # ingest_trials · eval_retrieval · demo_tour · export_demo_corpus
+├── src/clinical_trial_mcp/ # compat shim preserving pre-refactor import paths
+└── tests/                  # core · clinical · openfda · pubmed · platform · staging
 ```
 
 ---
 
 ## Data Model
 
-### `trials` table
+Two layers, deliberately separate. `documents` is the **retrieval** layer: one
+embedded row per citable record, scoped by `source_id`, serving the MCP tools.
+`staging.*` is the **analysis** layer: the same upstreams' relational files as
+real tables. Neither replaces the other.
+
+### `documents` — the canonical retrieval table (`core/store/schema.sql`)
+
 ```sql
-CREATE TABLE trials (
-    nct_id          TEXT PRIMARY KEY,          -- e.g. NCT04280705
-    brief_title     TEXT NOT NULL,
-    official_title  TEXT,
-    status          TEXT,                      -- RECRUITING, COMPLETED, etc.
-    phase           TEXT,
-    conditions      TEXT[],                    -- array of condition strings
-    interventions   TEXT[],
-    brief_summary   TEXT,
-    eligibility_criteria TEXT,                 -- raw inclusion/exclusion text
-    start_date      DATE,
-    last_updated    TIMESTAMP,
-    source_json     JSONB,                     -- full raw API response
-    embedding       vector(1024),              -- voyage-3 on brief_summary + first 300 chars eligibility
-    search_tsv      tsvector GENERATED ALWAYS AS (...) STORED  -- lexical half of hybrid search
+CREATE TABLE documents (
+    source_id    TEXT        NOT NULL,       -- 'clinical', 'openfda_label', 'pubmed', …
+    doc_id       TEXT        NOT NULL,       -- source-native id (NCT…, PMID, set id)
+    title        TEXT        NOT NULL,
+    embed_text   TEXT        NOT NULL,       -- the text that gets embedded
+    structured   JSONB       NOT NULL,       -- full normalized payload (powers get_details)
+    url          TEXT        NOT NULL,       -- canonical public link, for citations
+    updated_at   TIMESTAMPTZ NOT NULL,       -- upstream's last-update; drives incremental refresh
+    embedding    vector(1024) NOT NULL,      -- voyage-3 native dim
+    ingested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    search_tsv   tsvector GENERATED ALWAYS AS (…) STORED,   -- lexical half of hybrid search
+    PRIMARY KEY (source_id, doc_id)
 );
 
-CREATE INDEX trials_embedding_idx
-    ON trials USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
-CREATE INDEX trials_search_tsv_idx ON trials USING gin (search_tsv);
+CREATE INDEX documents_embedding_idx ON documents USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX documents_source_updated_idx ON documents (source_id, updated_at);
+CREATE INDEX documents_search_tsv_idx ON documents USING gin (search_tsv);
 ```
 
-`search_tsv` is a STORED generated column over `brief_title + brief_summary +
-eligibility_criteria` — it auto-backfills on `ALTER` and stays in sync on
-write, so adding hybrid search needed no ingest change. `search_trials` fuses
-the cosine ranking and the `ts_rank` lexical ranking with Reciprocal Rank
-Fusion (see `tools/search_trials.py`).
+One table for every vertical, scoped by `source_id` — that is what makes the
+generic tools generic and the cross-source joins a SQL statement rather than an
+agent loop. Companion tables: `source_state` (refresh watermarks),
+`tool_calls` (per-invocation metering), `api_keys` (hashed tier keys).
 
-The `embedding` column is generated from `brief_summary` (and optionally first 500 chars of `eligibility_criteria` concatenated). This gives pgvector a real workload because eligibility text is dense, domain-specific, and hard to keyword-match.
+`search_tsv` is a STORED generated column over `title || embed_text`; it
+auto-backfills on `ALTER` and stays in sync on write, so adding hybrid search
+needed no ingest change. `semantic_search` fuses the cosine ranking and the
+`ts_rank` lexical ranking with Reciprocal Rank Fusion (`core/tools/semantic_search.py`).
+
+**The HNSW index is not used by the production search path, and that is
+measured, not assumed.** `semantic_search` ranks with
+`ROW_NUMBER() OVER (ORDER BY embedding <=> $2)`, which demands a total ordering
+over the filtered set and so forces a sequential scan. See README §Performance
+for the `EXPLAIN ANALYZE` numbers. Keep the index — `find_similar` and any
+direct top-k query do use it — but do not claim the hybrid query benefits from it.
+
+### `staging.*` — the relational layer (`staging/schema.sql`)
+
+14 tables: seven FAERS quarterly tables plus the withdrawn-case list and the
+resolved `faers_case_current`, five AACT tables from a pinned monthly archive,
+and `load_run` / `load_reject` for the bookkeeping. Every table carries its
+partition column first (`quarter` for FAERS, `snapshot` for AACT), a declared
+grain proved by a gate, and — for FAERS dates — a `*_raw` / `*_prec` / `DATE`
+triple so a partial date is never completed by padding. See
+[`staging/README.md`](staging/README.md) and [`docs/STAGING.md`](docs/STAGING.md).
 
 ---
 
@@ -204,11 +250,18 @@ uv run python -m core.refresh --due
 # Run an MCP server (stdio; one source per process via MCP_SUITE_SOURCE)
 MCP_SUITE_SOURCE=clinical uv run python -m core.server
 
-# Run tests
+# Relational staging (analysis layer; see staging/README.md)
+uv run python -m staging schema                 # apply/refresh the staging DDL
+uv run python -m staging load-faers --quarters 2025Q3,2025Q4,2026Q1,2026Q2
+uv run python -m staging load-aact  --snapshot 2026-10-01
+uv run python -m staging gates                  # five gates → docs/STAGING.md
+# ...add --limit 3000 to any load for a one-minute smoke run
+
+# Run tests (the staging integration tests skip without a reachable Postgres)
 uv run pytest tests/ -v
 
 # Lint + type-check
-uv run ruff check . && uv run ruff format --check . && uv run mypy core servers
+uv run ruff check . && uv run ruff format --check . && uv run mypy
 ```
 
 ---
@@ -243,7 +296,7 @@ EMBEDDING_MODEL=voyage-3
 # switch to claude-sonnet-4-6 for richer summaries.
 SUMMARY_MODEL=claude-haiku-4-5-20251001
 
-# Max trials to return from search_trials tool
+# Max rows returned by semantic_search
 SEARCH_TOP_K=10
 
 # Ingest script defaults
@@ -258,9 +311,9 @@ DEFAULT_INGEST_MAX=500
 - **Do NOT use synchronous `psycopg2`** — the MCP server is async throughout; `asyncpg` only
 - **Do NOT store raw embedding vectors in Python memory** between requests — always round-trip through Postgres
 - **Do NOT expose the Anthropic or Voyage API keys** in any log line, tool response, or error message
-- **Do NOT call `ClinicalTrials.gov` at query time in `search_trials`** — that tool is purely local pgvector; only `get_trial_details` makes live API calls
+- **Do NOT call an upstream API at query time in `semantic_search`** — that tool is purely local pgvector + FTS; only `get_details` makes live API calls
 - **Do NOT swallow exceptions silently** — log them and return a user-readable error via `TextContent`
-- **Do NOT skip the `ivfflat` index** on the embedding column — without it, pgvector does exact KNN and won't scale past ~10k rows
-- **Do NOT embed empty strings** — check `brief_summary` is non-null/non-empty before calling the embedding API in the ingest script
+- **Do NOT claim the ANN index speeds up hybrid search** — the embedding column carries an HNSW index (not ivfflat), and `EXPLAIN ANALYZE` shows the RRF query cannot use it, because `ROW_NUMBER() OVER (ORDER BY embedding <=> $2)` needs a total ordering. Keep the index for `find_similar` and direct top-k queries; state the measured numbers rather than the folklore
+- **Do NOT embed empty strings** — the ingest runner skips any document whose `embed_text` is blank before calling the embedding API
 - **Do NOT run the MCP server with HTTP transport by default** — Claude Desktop requires stdio transport; HTTP is for future extension only
 - **Do NOT commit `.env`** — `.gitignore` must include it from the start

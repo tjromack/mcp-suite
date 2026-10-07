@@ -23,6 +23,11 @@ services:
       # directory is non-empty).
       - ./core/store/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./demo/seed/02-demo-corpus.sql.gz:/docker-entrypoint-initdb.d/02-demo-corpus.sql.gz:ro
+      # The relational staging schema (add-on A4) comes up empty but present,
+      # so `python -m staging gates` and the staging integration tests run on a
+      # fresh clone without a separate DDL step. Loading it with data is a
+      # deliberate, several-hundred-megabyte act: `python -m staging load-faers`.
+      - ./staging/schema.sql:/docker-entrypoint-initdb.d/03-staging-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ctmcp -d clinical_trials"]
       interval: 5s

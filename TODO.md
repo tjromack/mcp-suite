@@ -1,6 +1,8 @@
 # TODO — mcp-suite
 
-**Status (2026-06): Phases 1–4 + A + B shipped & merged; the openFDA cross-server tool (PR #12) and reliability hardening (PR #13) are merged; servers #3 (PubMed) + #4 (Drugs@FDA approvals) + `evidence_for_trial` + Phase F (incremental refresh orchestrator) + Phase G (tool-call metering + `corpus_status`) + Phase H (API-key/tier authorization gate) are built on this branch. 217 tests, ruff + mypy clean.**
+**Status (2026-06): Phases 1–4 + A + B shipped & merged; the openFDA cross-server tool (PR #12) and reliability hardening (PR #13) are merged; servers #3 (PubMed) + #4 (Drugs@FDA approvals) + `evidence_for_trial` + Phase F (incremental refresh orchestrator) + Phase G (tool-call metering + `corpus_status`) + Phase H (API-key/tier authorization gate) are built on this branch. ruff + mypy clean.**
+
+**Status (2026-10): add-on A4 — the relational staging layer (`staging/`) — is built. FAERS quarterly extracts and a pinned AACT monthly archive now load into real tables beside `documents`, with five verification gates publishing to [`docs/STAGING.md`](docs/STAGING.md).**
 
 ### Merged on `main`
 - **Phases 1–4** — clinical-mcp v0.1 end-to-end.
@@ -36,10 +38,50 @@ Full plan + per-phase definition-of-done: **[docs/mcp-suite/05-roadmap.md](docs/
 | **H** | **Platform / gateway** (`mcp_platform/`) — API keys, tiers, per-key rate limits + cross-server gating | ✅ this branch |
 | **I** | **Landing page + commercial validation** — `mcp-suite-site`, free-key CTA, 5 conversations (was Phase C/G) | ⬜ **next** |
 | **J** | **Breadth on demand** — servers #5+ (NPI, RxNorm), only on a usage/cross-sell signal | ⬜ |
+| **A4** | **Relational staging** (`staging/`) — FAERS quarterly extracts + pinned AACT archive as joinable tables beside `documents`, with grain / conservation / dedup / integrity / reject gates | ✅ 2026-10 |
 
 Why F next, not another server: with 6 sources spanning trials + the full FDA quadrant + literature, "always fresh" — not "one more source" — is the claim that proves the positioning. Breadth (Phase J) is the cheapest axis and is deliberately last.
 
 Each is a ~1-day build on the contracts: one `DataSource` connector + optional custom tool + `server.toml` + tests. Add a cross-server tool when it unlocks a real "X → Y" question.
+
+### Add-on A4 — relational staging (shipped 2026-10)
+
+`documents` answers "what should I cite?". It cannot answer "how many distinct
+cases, as opposed to reports?" — there is no grain, no join, no partition. The
+`staging/` package is the other half: the same upstreams' relational files
+loaded as real tables, **beside** the document store rather than instead of it.
+
+- **FAERS** — four consecutive quarterly ASCII extracts, all seven tables plus
+  the FDA's withdrawn-case list, with case-version dedup (latest `fda_dt`, then
+  highest `primaryid`, then quarter — a total order, so it is reproducible).
+- **AACT** — `studies`, `sponsors`, `facilities`, `conditions`, `interventions`
+  from one pinned monthly archive. The archive is 2.5 GB and those five are
+  ~330 MB of it, so `staging/remote_zip.py` reads the zip's central directory
+  over HTTP range requests and fetches only the members it needs.
+- **Gates** — grain, conservation, dedup, integrity, rejects. Each returns rows
+  only on failure; `python -m staging gates` runs them and rewrites
+  [`docs/STAGING.md`](docs/STAGING.md).
+
+Three findings worth keeping, all in that report:
+
+1. **FAERS child tables have no unique key.** `(primaryid, drug_seq)` is a join
+   key, not an identity — one case's `drug_seq` 1 arrives up to 103 times, one
+   row per reported manufacturing lot. Counting rows after that join counts lot
+   reports, not drugs. The gate measures the fan-out rather than pretending the
+   key is unique.
+2. **AACT's export is unquoted**, so a `|` inside an official title widens the
+   row and cannot be un-escaped. Those lines are kept in `staging.load_reject`
+   with their line numbers and counted, never dropped.
+3. **A large share of FAERS dates are not day-precision.** They are kept as
+   `*_raw` + `*_prec` with a real `DATE` only where the upstream gave a day.
+   Padding them would have invented values indistinguishable from observed ones.
+
+Follow-ups, not blockers:
+
+- [ ] Bundle a small staged slice in `demo/seed/` so a clean clone has rows to
+      query without the full multi-hundred-megabyte load.
+- [ ] A `staged_counts` MCP tool, if a real question wants the relational side
+      exposed to the assistant. Deliberately not built on spec.
 
 ### Phase F — refresh pipelines (the moat)
 The positioning calls the freshness pipeline "the product." Once ≥2 servers carry real backfills, add a scheduler invoking `python -m core.ingest --source <id> --since <last-run>` per source on a cadence (events daily; labels/recalls/literature weekly). Keep it boring — cron or a single Airflow DAG; no multi-tenant infra. Idempotent upserts mean re-runs are safe.

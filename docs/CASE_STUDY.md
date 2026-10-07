@@ -57,14 +57,36 @@ connector must map into. That mapping is the work, and it is where the value is.
 Six servers, nine tools, 212,919 documents locally. A 300-document slice ships in the repo so a
 clone is queryable from `docker compose up -d` with no API keys.
 
+**The second table is the one that answers different questions.** One embedded row per citable
+record is the right shape for retrieval and the wrong shape for analysis: there is no grain, nothing
+joins, and "how many distinct adverse-event cases, as opposed to reports?" has no SQL to express it.
+So a relational staging layer sits beside the document store — the same upstreams' *relational*
+files loaded as real tables. Four quarterly FAERS extracts, all seven tables plus the FDA's
+withdrawn-case list; five tables from a pinned monthly AACT archive of ClinicalTrials.gov. 29.5M
+rows, every table with a declared grain and a gate that proves it.
+
+Three rules hold throughout, and each is a check rather than an intention. Partition first, so
+re-loading a quarter replaces that quarter and nothing else. Nothing dropped: a line that will not
+parse is kept verbatim with its line number, and `rows_read = rows_loaded + rows_rejected` is
+re-checked from the database. Nothing guessed: a FAERS date that gives only a month keeps its raw
+value and its precision, and gets a real `DATE` only where the upstream gave a day — padding it
+would invent values nothing downstream could tell from observed ones.
+
+AACT publishes its archive as one 2.5 GB zip and this layer needs five of its 49 members. A zip's
+directory lives at the end of the file and each member is an addressable byte range, so the loader
+reads the central directory over HTTP range requests and fetches only those five: 332 MB instead of
+2,534 MB, an eighth of the transfer, with no separate code path for local archives.
+
 ## How it's verified
 
 | Check | Result |
 |---|---|
-| Contract and unit tests | 309 passing, 133 of them contract or failure-path — 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable database, empty corpus |
+| Contract and unit tests | 433 passing, 182 of them contract or failure-path — 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable database, empty corpus |
 | Retrieval spot-check, 20 labelled questions | hit@1 70%, hit@3 80%, hit@10 95%, MRR 0.77 — misses published |
 | Clean-clone CI | Every push: `docker compose up`, six servers selftest, a keyless search returns real trials |
 | End-to-end tour | All nine tools over real MCP stdio, 14/14 steps |
+| Staging gates | Grain, conservation, dedup, integrity, rejects over 29.5M rows — 5/5 pass, every number published |
+| Staging integration tests | Loader, gates and report against a real Postgres rather than a fake — 8 tests, run in the clean-clone CI job |
 
 Per-tool contract tests drive `list_tools()` for all six servers and assert the registered names, input-schema arguments, read-only annotations and the `list[TextContent]` return — the surface a client actually sees.
 
@@ -98,6 +120,37 @@ Three more, found the same way:
   "Connection closed" — pointing at the client rather than at Postgres. It now starts anyway, tells
   the caller what to run, and reconnects on a later call without a restart.
 
+**And once more on the staging layer, where I blamed the wrong component first.** The first real
+load ran at 450 rows per second — 438,512 rows took sixteen minutes — and Postgres was the obvious
+suspect: 36 columns, two indexes, a container on a Windows host. Measuring instead of assuming took
+ten minutes and said otherwise. `COPY` into the same shape did 390,000 rows per second. The parser
+did 118,000 rows per second. The download took twelve seconds. None of them was the problem.
+
+The problem was one line of mine. The line reader accumulated each decompressed chunk in a buffer
+and consumed it with `pending = pending[index + 1:]`, which copies everything left in the buffer
+once per line. An 8 MiB compressed chunk inflates to about 40 MB and holds roughly 300,000 lines, so
+that slice moved terabytes to read a file. Splitting once per chunk instead of slicing once per line
+made the same load take 21 seconds — 47× faster, and the four-quarter load went from an overnight
+job to about eight minutes. The regression test asserts 200,000 lines parse in under ten seconds,
+which the quadratic version missed by minutes.
+
+Two findings came out of the gates rather than out of a bug, and both change how the data must be
+used:
+
+- **FAERS child tables have no unique key.** I declared `(primaryid, drug_seq)` as the grain of the
+  drug table because that is what the documentation implies. Across 7,294,235 drug rows the gate
+  found only 6,569,196 distinct keys, with one key accounting for 103 rows — the same drug, the same
+  route, differing only in the reported manufacturing lot. `(primaryid, drug_seq)` is how you *join*
+  a drug to its therapy dates and indications; it is not what identifies a row. Counting rows after
+  that join counts lot reports, not drugs. The declaration now says so, and the gate publishes the
+  fan-out — 1.11× overall, 103× at worst — instead of asserting a uniqueness that was never there.
+- **Every orphaned AACT child traces to a rejected parent.** The integrity gate reported 857 child
+  rows pointing at studies that are not in the snapshot, which looked like upstream inconsistency.
+  It is not: 62 study rows were rejected at load because an unescaped `|` inside an official title
+  widened them, and those are exactly the 62 studies whose sponsors, conditions, interventions and
+  sites are orphaned. The gate now reconciles orphans against the reject lane by key and fails only
+  on the ones the reject lane cannot explain.
+
 ## What this doesn't prove
 
 - Not clinical decision support: no clinical validation, no regulatory clearance, not for diagnosis,
@@ -107,6 +160,12 @@ Three more, found the same way:
 - Retrieval is scored on 20 questions written by the person who built the corpus. The interval
   around those percentages is wide.
 - Single Postgres, stdio transport, one tenant. The API-key tier gate exists and is off by default.
+- The staging layer is pinned, not live: four FAERS quarters and one AACT monthly archive, loaded
+  on demand. It is not a pharmacovigilance pipeline, it computes no disproportionality
+  statistic, and FAERS counts are not incidence rates — the reports are voluntary, unverified
+  and duplicated across reporters.
+- The staging gates prove keys, conservation and referential integrity. They say nothing about
+  whether a value is clinically plausible.
 
 ## What I'd do differently
 
@@ -115,7 +174,14 @@ DS-8201a rather than trastuzumab deruxtecan — rank 28th for a question using t
 a sibling trial ranks first. The synonyms were in the structured payload the whole time.
 
 And write the end-to-end smoke test before the unit tests, not after. Every defect above was found
-by running the thing, and each one had passing unit tests over it.
+by running the thing, and each one had passing unit tests over it. The staging layer now has eight
+tests that need a real Postgres and skip without one; the first bug they would have caught — asyncpg
+inferring a bound parameter's type from its cast, so a string partition key raised rather than
+loading — is one no fake connection can model.
+
+I would also profile before optimising, and before blaming. The 47× loss was mine, not the
+database's, and ten minutes of measurement found it after an hour of plausible theories about
+Docker volumes and index maintenance.
 
 ---
 
