@@ -11,9 +11,9 @@ Validated against the site's `src/content.config.ts` schema and `_template.mdx` 
 ```yaml
 ---
 title: mcp-suite
-summary: Six MCP servers putting clinical trials, FDA drug data and PubMed
+summary: Six MCP servers putting clinical trials, FDA data and PubMed
   literature inside Claude as callable tools, over a document store for
-  retrieval and 29.5M rows of staged relational tables for analysis.
+  retrieval and 29.5M staged rows for analysis.
 date: 2026-10-07
 tech:
   - python
