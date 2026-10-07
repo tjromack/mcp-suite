@@ -35,3 +35,8 @@ htmlcov/
 
 # Postgres data (if mounted locally)
 pgdata/
+
+# Personal working documents — the long-form project explainers are written
+# for the author, not for the repo, and go stale as the code moves.
+docs/*explained*.pdf
+docs/EXPLAINER.pdf
