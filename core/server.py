@@ -2,7 +2,7 @@
 the generic + custom tools, runs over stdio.
 
 One process serves one source (one MCP server in `claude_desktop_config.json`
-per vertical). The source_id is picked up from the ``MCP_SUITE_SOURCE`` env
+per vertical). The source_id is picked up from the ``BIOMED_EVIDENCE_SOURCE`` env
 var (default ``clinical``), so future servers (openfda, …) only need a new
 config-file entry — no code change here.
 
@@ -52,8 +52,9 @@ logger = logging.getLogger("core.server")
 def _resolve_source_id() -> str:
     """Which source this process serves: `--source <id>` wins, else the env var.
 
-    The flag exists because `MCP_SUITE_SOURCE=x cmd` is bash, `$env:MCP_SUITE_SOURCE="x"; cmd`
-    is PowerShell, and `set MCP_SUITE_SOURCE=x` is cmd.exe — one command that works in all
+    The flag exists because `BIOMED_EVIDENCE_SOURCE=x cmd` is bash,
+    `$env:BIOMED_EVIDENCE_SOURCE="x"; cmd` is PowerShell, and
+    `set BIOMED_EVIDENCE_SOURCE=x` is cmd.exe — one command that works in all
     three beats three sets of instructions. Claude Desktop keeps using the env var.
     """
     argv = sys.argv[1:]
@@ -61,14 +62,14 @@ def _resolve_source_id() -> str:
         i = argv.index("--source")
         if i + 1 < len(argv):
             return argv[i + 1]
-    return os.environ.get("MCP_SUITE_SOURCE", "clinical")
+    return os.environ.get("BIOMED_EVIDENCE_SOURCE", "clinical")
 
 
 SOURCE_ID = _resolve_source_id()
 # Phase H — the API key this process presents to the authorization gate. Like
-# MCP_SUITE_SOURCE, it's per-process for the stdio transport. Only consulted
+# BIOMED_EVIDENCE_SOURCE, it's per-process for the stdio transport. Only consulted
 # when AUTH_ENABLED=true (otherwise the gate allows everything).
-API_KEY = os.environ.get("MCP_SUITE_API_KEY")
+API_KEY = os.environ.get("BIOMED_EVIDENCE_API_KEY")
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -80,7 +81,7 @@ def _load_server_toml(source_id: str) -> dict[str, Any]:
         available = sorted(p.parent.name for p in (_REPO_ROOT / "servers").glob("*/server.toml"))
         raise SystemExit(
             f"Unknown source '{source_id}'. Available: {', '.join(available)}\n"
-            f"Pass one with --source <id>, or set MCP_SUITE_SOURCE."
+            f"Pass one with --source <id>, or set BIOMED_EVIDENCE_SOURCE."
         )
     with path.open("rb") as f:
         return tomllib.load(f)

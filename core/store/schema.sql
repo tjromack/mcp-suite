@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS source_state (
 -- writes are best-effort: a failed insert never breaks the tool call.
 CREATE TABLE IF NOT EXISTS tool_calls (
     id           BIGSERIAL PRIMARY KEY,
-    source_id    TEXT        NOT NULL,      -- which server (MCP_SUITE_SOURCE) served the call
+    source_id    TEXT        NOT NULL,      -- which server (BIOMED_EVIDENCE_SOURCE) served the call
     tool_name    TEXT        NOT NULL,      -- semantic_search, summarize_evidence, …
     status       TEXT        NOT NULL,      -- 'ok' | 'error'
     duration_ms  INTEGER     NOT NULL,

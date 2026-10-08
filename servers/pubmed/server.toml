@@ -1,5 +1,5 @@
 # PubMed — biomedical literature server (NCBI E-utilities).
-# Consumed by core/server.py when MCP_SUITE_SOURCE=pubmed and by
+# Consumed by core/server.py when BIOMED_EVIDENCE_SOURCE=pubmed and by
 # core/ingest.py when invoked with --source pubmed.
 
 source_id    = "pubmed"

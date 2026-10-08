@@ -30,7 +30,7 @@ Uncomment `max_records = 50` in `server.toml` for a sanity-size backfill. An
 ## Run the MCP server
 
 ```bash
-MCP_SUITE_SOURCE=openfda_drugsfda uv run python -m core.server
+BIOMED_EVIDENCE_SOURCE=openfda_drugsfda uv run python -m core.server
 ```
 
 ## Tool names Claude sees

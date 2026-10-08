@@ -42,7 +42,7 @@ Edit `term` in `server.toml` to scope the corpus (PubMed query syntax, e.g.
 ## Run the MCP server
 
 ```bash
-MCP_SUITE_SOURCE=pubmed uv run python -m core.server
+BIOMED_EVIDENCE_SOURCE=pubmed uv run python -m core.server
 ```
 
 Or wire it into `claude_desktop_config.json` as an `mcpServers` entry — see

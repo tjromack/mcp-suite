@@ -7,7 +7,7 @@
 
 ```bash
 uv run python -m core.ingest --source openfda_event
-MCP_SUITE_SOURCE=openfda_event uv run python -m core.server
+BIOMED_EVIDENCE_SOURCE=openfda_event uv run python -m core.server
 ```
 
 See [`servers/openfda_label/README.md`](../openfda_label/README.md) for the

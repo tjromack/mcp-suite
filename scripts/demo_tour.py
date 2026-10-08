@@ -1,7 +1,7 @@
 """Guided demo tour: exercise every mcp-suite tool over real MCP stdio.
 
 Launches each server exactly the way Claude Desktop does (``python -m
-core.server`` with ``MCP_SUITE_SOURCE``), then walks one story end to end:
+core.server`` with ``BIOMED_EVIDENCE_SOURCE``), then walks one story end to end:
 a liver-cancer immunotherapy trial (KEYNOTE-937, NCT03867084) followed into
 the FDA record and the published literature. Every one of the suite's tools
 runs at least once, across all six servers.
@@ -300,7 +300,7 @@ class Servers:
             params = StdioServerParameters(
                 command=sys.executable,
                 args=["-m", "core.server"],
-                env={**os.environ, "MCP_SUITE_SOURCE": source, "PYTHONIOENCODING": "utf-8"},
+                env={**os.environ, "BIOMED_EVIDENCE_SOURCE": source, "PYTHONIOENCODING": "utf-8"},
                 cwd=str(REPO),
             )
             read, write = await self._stack.enter_async_context(

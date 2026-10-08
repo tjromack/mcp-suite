@@ -15,7 +15,7 @@ The policy:
   ``tool_calls`` meter) reaches its tier limit.
 
 The gate is transport-agnostic: today the raw key arrives via
-``MCP_SUITE_API_KEY`` (in-process), but the same function would run behind an
+``BIOMED_EVIDENCE_API_KEY`` (in-process), but the same function would run behind an
 HTTP gateway reading an ``Authorization`` header.
 """
 
@@ -116,7 +116,7 @@ async def authorize(
         return Decision(
             allowed=False,
             reason="missing_key",
-            message="No API key presented. Set MCP_SUITE_API_KEY for this server.",
+            message="No API key presented. Set BIOMED_EVIDENCE_API_KEY for this server.",
         )
     if rec is None or not rec["active"]:
         return Decision(

@@ -89,7 +89,7 @@ async def _cmd_issue(label: str | None, tier: str) -> None:
     print("API key issued — copy it now, it will not be shown again:\n")
     print(f"    {raw}\n")
     print(f"  key_id: {key_id(hash_key(raw))}   tier: {tier}   label: {label or '(none)'}")
-    print("\nUse it by setting MCP_SUITE_API_KEY (and AUTH_ENABLED=true) for the server.")
+    print("\nUse it by setting BIOMED_EVIDENCE_API_KEY (and AUTH_ENABLED=true) for the server.")
 
 
 async def _cmd_list() -> None:

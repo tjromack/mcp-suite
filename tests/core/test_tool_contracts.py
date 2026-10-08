@@ -67,7 +67,7 @@ EXPECTED_SCHEMA: dict[str, tuple[set[str], set[str]]] = {
 
 _DUMP_TOOLS = """
 import asyncio, json, os, sys
-os.environ["MCP_SUITE_SOURCE"] = sys.argv[1]
+os.environ["BIOMED_EVIDENCE_SOURCE"] = sys.argv[1]
 import core.server as server
 
 async def main():

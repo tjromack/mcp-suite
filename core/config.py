@@ -60,7 +60,7 @@ class Settings(BaseSettings):
 
     # Phase H — authorization. When false (default) every tool runs ungated,
     # which is correct for local/stdio dev. When true, each tool call is
-    # checked by mcp_platform.gate against the API key in MCP_SUITE_API_KEY:
+    # checked by mcp_platform.gate against the API key in BIOMED_EVIDENCE_API_KEY:
     # tier monthly-call cap + cross-server-tool gating. Maps to env AUTH_ENABLED.
     auth_enabled: bool = False
 

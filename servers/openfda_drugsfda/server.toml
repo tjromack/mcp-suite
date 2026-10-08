@@ -1,5 +1,5 @@
 # openFDA — Drugs@FDA approval-history server.
-# Consumed by core/server.py when MCP_SUITE_SOURCE=openfda_drugsfda and by
+# Consumed by core/server.py when BIOMED_EVIDENCE_SOURCE=openfda_drugsfda and by
 # core/ingest.py when invoked with --source openfda_drugsfda.
 
 source_id    = "openfda_drugsfda"

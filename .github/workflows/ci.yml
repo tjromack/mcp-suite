@@ -80,7 +80,7 @@ jobs:
         run: |
           for source in clinical openfda_label openfda_event openfda_enforcement openfda_drugsfda pubmed; do
             echo "--- $source"
-            MCP_SUITE_SOURCE=$source uv run python -m core.server --selftest
+            BIOMED_EVIDENCE_SOURCE=$source uv run python -m core.server --selftest
           done
 
       - name: Staging integration tests (these need a real Postgres)

@@ -42,7 +42,7 @@ uv run python -m core.server --selftest --source clinical
 ```
 
 Same command in bash, PowerShell and cmd.exe. (Claude Desktop selects the source with the
-`MCP_SUITE_SOURCE` env var instead, as in the config below.)
+`BIOMED_EVIDENCE_SOURCE` env var instead, as in the config below.)
 
 Then paste this into your Claude Desktop config — `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) — with the path replaced, and restart Claude Desktop completely (tray icon → Quit, not just closing the window):
 
@@ -52,17 +52,17 @@ Then paste this into your Claude Desktop config — `%APPDATA%\Claude\claude_des
     "clinical-trials": {
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
-      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "clinical" }
+      "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "clinical" }
     },
     "fda-drug-labels": {
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
-      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "openfda_label" }
+      "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "openfda_label" }
     },
     "pubmed": {
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
-      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "pubmed" }
+      "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "pubmed" }
     }
   }
 }
@@ -366,7 +366,7 @@ GROUP BY tool_name ORDER BY 2 DESC;
 
 ### 5d. Authorization — API keys + tiers (Phase H)
 
-An optional in-process authorization gate ([`mcp_platform/`](mcp_platform/)). Off by default (`AUTH_ENABLED=false`) so local/stdio dev is ungated. When on, every tool call is checked against the key in `MCP_SUITE_API_KEY`: tier monthly-call cap + cross-server-tool gating, reading the Phase-G meter as the usage ledger. Keys are stored as a sha256 hash only (raw key shown once).
+An optional in-process authorization gate ([`mcp_platform/`](mcp_platform/)). Off by default (`AUTH_ENABLED=false`) so local/stdio dev is ungated. When on, every tool call is checked against the key in `BIOMED_EVIDENCE_API_KEY`: tier monthly-call cap + cross-server-tool gating, reading the Phase-G meter as the usage ledger. Keys are stored as a sha256 hash only (raw key shown once).
 
 | Tier | Monthly calls | Cross-server tools |
 |---|---|---|
@@ -379,7 +379,7 @@ An optional in-process authorization gate ([`mcp_platform/`](mcp_platform/)). Of
 uv run python -m mcp_platform.keys issue --tier suite --label "alice@acme"   # prints the key once
 uv run python -m mcp_platform.keys list
 # Run a server with gating on:
-AUTH_ENABLED=true MCP_SUITE_API_KEY=mcps_... MCP_SUITE_SOURCE=clinical uv run python -m core.server
+AUTH_ENABLED=true BIOMED_EVIDENCE_API_KEY=mcps_... BIOMED_EVIDENCE_SOURCE=clinical uv run python -m core.server
 ```
 
 Denied calls return a clean `Access denied: …` message (never an exception) and are recorded with status `denied`. `corpus_status` is exempt (never gated). The same `authorize()` gate would sit behind an HTTP gateway later — see [`mcp_platform/README.md`](mcp_platform/README.md).
@@ -413,29 +413,29 @@ into your Claude Desktop config and edit the absolute path:
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
                "python", "-m", "core.server"],
-      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "clinical" }
+      "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "clinical" }
     },
     "fda-drugs": {
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
                "python", "-m", "core.server"],
-      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "openfda_label" }
+      "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "openfda_label" }
     },
     "pubmed": {
       "command": "uv",
       "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
                "python", "-m", "core.server"],
-      "env": { "UV_NATIVE_TLS": "1", "MCP_SUITE_SOURCE": "pubmed" }
+      "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "pubmed" }
     }
   }
 }
 ```
 
-One MCP-server entry per `source_id` — `core.server` reads `MCP_SUITE_SOURCE` (default `clinical`) to pick which `servers/<id>/server.toml` to wire. Add more entries for `openfda_event` / `openfda_enforcement` / `openfda_drugsfda` if you want their generic tools too; the cross-source `summarize_safety_profile` lives on the `openfda_label` entry and queries the openFDA corpora in one go. The `pubmed` entry adds literature search + the cited `summarize_evidence` synthesizer; the clinical entry's `drug_context_for_trial` joins a trial's drugs to their FDA approval/label/FAERS/recall context, and `evidence_for_trial` joins to related PubMed literature.
+One MCP-server entry per `source_id` — `core.server` reads `BIOMED_EVIDENCE_SOURCE` (default `clinical`) to pick which `servers/<id>/server.toml` to wire. Add more entries for `openfda_event` / `openfda_enforcement` / `openfda_drugsfda` if you want their generic tools too; the cross-source `summarize_safety_profile` lives on the `openfda_label` entry and queries the openFDA corpora in one go. The `pubmed` entry adds literature search + the cited `summarize_evidence` synthesizer; the clinical entry's `drug_context_for_trial` joins a trial's drugs to their FDA approval/label/FAERS/recall context, and `evidence_for_trial` joins to related PubMed literature.
 
 `--directory` makes `uv` use this project's venv and resolve its `.env`. `UV_NATIVE_TLS=1` is harmless off-proxy. Postgres must be running and `.env` filled in. Restart Claude Desktop fully (system tray quit) for new config to load.
 
-The legacy `python -m clinical_trial_mcp.server` entry point still works as a compat shim — it's equivalent to `core.server` with `MCP_SUITE_SOURCE=clinical`.
+The legacy `python -m clinical_trial_mcp.server` entry point still works as a compat shim — it's equivalent to `core.server` with `BIOMED_EVIDENCE_SOURCE=clinical`.
 
 ---
 
@@ -557,7 +557,7 @@ docker compose --profile server build
 # ingest inside the container (DB comes up automatically, healthcheck-gated):
 docker compose run --rm mcp uv run python -m core.ingest --source clinical
 # sanity-check the server wiring (lists the registered tools):
-docker compose run --rm --no-deps -e MCP_SUITE_SOURCE=clinical mcp uv run python -c \
+docker compose run --rm --no-deps -e BIOMED_EVIDENCE_SOURCE=clinical mcp uv run python -c \
   "import asyncio; from core.server import mcp; print([t.name for t in asyncio.run(mcp.list_tools())])"
 ```
 

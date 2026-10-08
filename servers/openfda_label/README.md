@@ -34,7 +34,7 @@ An `OPENFDA_API_KEY` in `.env` lifts the daily cap from 1k → 120k requests
 
 ```bash
 # Pick this server's source_id via env var; core.server reads it.
-MCP_SUITE_SOURCE=openfda_label uv run python -m core.server
+BIOMED_EVIDENCE_SOURCE=openfda_label uv run python -m core.server
 ```
 
 Or wire it into `claude_desktop_config.json` as an `mcpServers` entry —

@@ -87,20 +87,20 @@ async def test_selftest_flags_source_with_no_documents(_pool_with, capsys):
 
 def test_source_flag_beats_environment(monkeypatch):
     monkeypatch.setattr(server.sys, "argv", ["core.server", "--selftest", "--source", "pubmed"])
-    monkeypatch.setenv("MCP_SUITE_SOURCE", "clinical")
+    monkeypatch.setenv("BIOMED_EVIDENCE_SOURCE", "clinical")
     assert server._resolve_source_id() == "pubmed"
 
 
 def test_source_falls_back_to_environment(monkeypatch):
     monkeypatch.setattr(server.sys, "argv", ["core.server", "--selftest"])
-    monkeypatch.setenv("MCP_SUITE_SOURCE", "openfda_label")
+    monkeypatch.setenv("BIOMED_EVIDENCE_SOURCE", "openfda_label")
     assert server._resolve_source_id() == "openfda_label"
 
 
 def test_dangling_source_flag_falls_back(monkeypatch):
     # `--source` with nothing after it shouldn't IndexError.
     monkeypatch.setattr(server.sys, "argv", ["core.server", "--source"])
-    monkeypatch.delenv("MCP_SUITE_SOURCE", raising=False)
+    monkeypatch.delenv("BIOMED_EVIDENCE_SOURCE", raising=False)
     assert server._resolve_source_id() == "clinical"
 
 

@@ -5,8 +5,8 @@
 > imports during collection), so it's `mcp_platform/`. Scope is unchanged.
 
 The platform layer that turns the metered suite into an access-controlled
-product. In-process today (a key is presented via `MCP_SUITE_API_KEY`, like
-`MCP_SUITE_SOURCE`); the same gate would run behind an HTTP gateway later.
+product. In-process today (a key is presented via `BIOMED_EVIDENCE_API_KEY`, like
+`BIOMED_EVIDENCE_SOURCE`); the same gate would run behind an HTTP gateway later.
 
 | File | Purpose |
 |---|---|
@@ -41,7 +41,7 @@ uv run python -m mcp_platform.keys list
 uv run python -m mcp_platform.keys revoke <key_id>
 
 # Run a server with gating ON:
-AUTH_ENABLED=true MCP_SUITE_API_KEY=mcps_... MCP_SUITE_SOURCE=clinical \
+AUTH_ENABLED=true BIOMED_EVIDENCE_API_KEY=mcps_... BIOMED_EVIDENCE_SOURCE=clinical \
   uv run python -m core.server
 ```
 

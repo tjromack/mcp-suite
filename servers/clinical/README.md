@@ -38,7 +38,7 @@ delegates to the command above with `--source clinical`.
 ## Run the MCP server
 
 ```bash
-# Defaults to source_id="clinical" via MCP_SUITE_SOURCE env var.
+# Defaults to source_id="clinical" via BIOMED_EVIDENCE_SOURCE env var.
 uv run python -m core.server
 # or via the compat shim that existing claude_desktop_config.json entries use:
 uv run python -m clinical_trial_mcp.server
