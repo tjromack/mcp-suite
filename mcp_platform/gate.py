@@ -34,7 +34,7 @@ logger = logging.getLogger("mcp_platform.gate")
 
 @dataclass(frozen=True)
 class Tier:
-    """A pricing tier's enforced limits (mirrors docs/mcp-suite/03 §3)."""
+    """A pricing tier's enforced limits (mirrors docs/biomed-evidence-mcp/03 §3)."""
 
     monthly_limit: int | None  # None = unlimited
     cross_server: bool  # may call cross-server tools?

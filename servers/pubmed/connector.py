@@ -51,7 +51,7 @@ HTTP_TIMEOUT_SECONDS = 30.0
 _DEFAULT_PAGE_SIZE = 100
 # Plain retstart paging is reliable below NCBI's ~10k window; past that the
 # History server (WebEnv/query_key) is required. Capped here; full-corpus
-# crawls are a v2 item (see docs/mcp-suite/04-pubmed-server-plan.md §refresh),
+# crawls are a v2 item (see docs/biomed-evidence-mcp/04-pubmed-server-plan.md §refresh),
 # mirroring the openFDA base's skip=25_000 ceiling.
 _MAX_RETSTART = 9_900
 _EFETCH_BATCH = 200  # NCBI's recommended efetch id ceiling per request.

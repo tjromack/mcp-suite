@@ -119,7 +119,7 @@ async def _cmd_revoke(key_id_prefix: str) -> None:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Manage mcp-suite API keys (Phase H).")
+    p = argparse.ArgumentParser(description="Manage biomed-evidence-mcp API keys (Phase H).")
     sub = p.add_subparsers(dest="command", required=True)
 
     issue = sub.add_parser("issue", help="Issue a new API key.")

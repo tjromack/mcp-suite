@@ -51,7 +51,7 @@ found from the recording.
 
 ### A · ~0:00 — What this is *(terminal on screen)*
 
-> "This is mcp-suite. Six MCP servers that put clinical trials, FDA drug data and PubMed literature
+> "This is biomed-evidence-mcp. Six MCP servers that put clinical trials, FDA drug data and PubMed literature
 > inside Claude as tools it can call. All public data, queried locally."
 
 ### B · ~0:15 — Setup *(terminal)* → clip `01-setup`
@@ -222,7 +222,8 @@ only real pauses — narrate over them, or let them run.*
 
 ## Appendix — the 2026-09-22 take
 
-`mcp-suite-demo.mkv`, 10:38, 1080p60, silent. Clips in `docs/media/` were cut from it with the
+`mcp-suite-demo.mkv`, 10:38, 1080p60, with spoken narration (measured at -41.8 LUFS, so it
+needs normalising before use). Clips in `docs/media/` were cut from it with the
 timings below (source seconds), cropped to `1920x1040` to drop the taskbar, sped up so each clip
 reads in about 15 seconds. Re-cut any of them without re-recording:
 
@@ -240,5 +241,8 @@ reads in about 15 seconds. Re-cut any of them without re-recording:
 **Not captured:** `get_details` (the live registry fetch). Eight of the nine tools appear. A 20-second
 take — *"Get the full registry record for NCT03867084"* — closes the gap whenever convenient.
 
-**If a future take is narrated**, keep the audio: this one is silent (mean volume −47 dB), which is
-fine for clips but thin for a standalone video.
+**The take is narrated, and the GIFs drop that.** An early measurement sampled a single quiet
+60-second window (−47 dB) and concluded the recording was silent; measured whole it is −41.8 LUFS
+of spoken commentary. The GIFs in `docs/media/` carry no audio by format, which is fine for
+in-page clips — but the narration is the reason to prefer the MP4s, or a hosted video, for anything
+standalone. Normalise before publishing; −41.8 LUFS is far below the −14 LUFS streaming target.

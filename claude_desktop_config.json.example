@@ -2,17 +2,17 @@
   "mcpServers": {
     "clinical-trials": {
       "command": "uv",
-      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\mcp-suite", "python", "-m", "core.server"],
+      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\biomed-evidence-mcp", "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "clinical" }
     },
     "fda-drugs": {
       "command": "uv",
-      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\mcp-suite", "python", "-m", "core.server"],
+      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\biomed-evidence-mcp", "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "openfda_label" }
     },
     "pubmed": {
       "command": "uv",
-      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\mcp-suite", "python", "-m", "core.server"],
+      "args": ["run", "--directory", "C:\\ABSOLUTE\\PATH\\TO\\biomed-evidence-mcp", "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "pubmed" }
     }
   }

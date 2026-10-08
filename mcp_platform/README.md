@@ -19,7 +19,7 @@ product. In-process today (a key is presented via `BIOMED_EVIDENCE_API_KEY`, lik
 
 ![Claude showing corpus status for six sources with document counts, refresh ages and a seven-day tool-call summary](../docs/media/01-corpus-status.gif)
 
-## Policy (mirrors `docs/mcp-suite/03-pricing-and-positioning.md` §3)
+## Policy (mirrors `docs/biomed-evidence-mcp/03-pricing-and-positioning.md` §3)
 
 | Tier | Monthly calls | Cross-server tools |
 |---|---|---|

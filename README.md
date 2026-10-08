@@ -1,8 +1,8 @@
-# 🧬 mcp-suite
+# 🧬 biomed-evidence-mcp
 
 > A suite of life-sciences MCP servers backed by curated, embedded, continuously-refreshed authoritative data — `ClinicalTrials.gov` today, with `openFDA`, `PubMed`, and more on the roadmap.
 
-[![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml)
+[![CI](https://github.com/tjromack/biomed-evidence-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/biomed-evidence-mcp/actions/workflows/ci.yml)
 
 **Status:** the **clinical**, **openFDA** (4 sources), and **PubMed** servers are shipped on the shared `core/` + per-vertical `servers/<x>/` template. The suite now covers:
 - **clinical** — ClinicalTrials.gov (3 generic tools + `summarize_eligibility` + `drug_context_for_trial` + `evidence_for_trial`)
@@ -12,7 +12,7 @@
 - **openfda_drugsfda** — FDA Drugs@FDA approval history (3 generic tools)
 - **pubmed** — PubMed biomedical literature (3 generic tools + `summarize_evidence` — cited synthesis over abstracts)
 
-433 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/mcp-suite/`](docs/mcp-suite/) and the live roadmap in [`TODO.md`](TODO.md).
+433 tests, `ruff` + `mypy` clean, CI green. Six `source_id`s span trials + the full FDA quadrant (labels · events · recalls · approvals) + literature, with an incremental refresh layer (`core.refresh`), per-tool-call metering + a `corpus_status` diagnostic, and an optional API-key/tier authorization gate (`mcp_platform/`). Adding the next vertical is ~one day's work — see the strategy docs at [`docs/biomed-evidence-mcp/`](docs/biomed-evidence-mcp/) and the live roadmap in [`TODO.md`](TODO.md).
 
 Alongside the retrieval layer, [`staging/`](staging/) loads the same upstreams' **relational** files — FAERS quarterly extracts and a pinned AACT archive of ClinicalTrials.gov — into 29.5M rows of joinable tables with declared, proved grain. See [Relational staging](#relational-staging--the-analysis-layer-beside-the-document-store).
 
@@ -29,8 +29,8 @@ Alongside the retrieval layer, [`staging/`](staging/) loads the same upstreams' 
 A 300-document demo corpus (trials · FDA labels, adverse events, recalls, approvals · PubMed abstracts) ships in this repo and loads itself on first boot. **No ingest, no API keys, no account.**
 
 ```bash
-git clone https://github.com/tjromack/mcp-suite.git
-cd mcp-suite
+git clone https://github.com/tjromack/biomed-evidence-mcp.git
+cd biomed-evidence-mcp
 uv sync
 docker compose up -d        # Postgres + pgvector, schema + demo corpus auto-loaded
 ```
@@ -51,17 +51,17 @@ Then paste this into your Claude Desktop config — `%APPDATA%\Claude\claude_des
   "mcpServers": {
     "clinical-trials": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/biomed-evidence-mcp", "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "clinical" }
     },
     "fda-drug-labels": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/biomed-evidence-mcp", "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "openfda_label" }
     },
     "pubmed": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite", "python", "-m", "core.server"],
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/biomed-evidence-mcp", "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "pubmed" }
     }
   }
@@ -114,7 +114,7 @@ Each server exposes the same three **generic** tools (`semantic_search`, `find_s
 | **openfda_drugsfda** (FDA Drugs@FDA approvals) | same | — (its approval data is surfaced via the clinical `drug_context_for_trial` join) |
 | **pubmed** (PubMed literature) | same | `summarize_evidence` — cited synthesis over the local abstract corpus; every claim cites a retrieved PMID, not-medical-advice disclaimer |
 
-The cross-source tools (`drug_context_for_trial`, `summarize_safety_profile`, `evidence_for_trial`) are the "cross-sell" tools that exist only because the suite exists — see [`docs/mcp-suite/02-openfda-server-plan.md`](docs/mcp-suite/02-openfda-server-plan.md) §3 and [`04-pubmed-server-plan.md`](docs/mcp-suite/04-pubmed-server-plan.md) §3.
+The cross-source tools (`drug_context_for_trial`, `summarize_safety_profile`, `evidence_for_trial`) are the "cross-sell" tools that exist only because the suite exists — see [`docs/biomed-evidence-mcp/02-openfda-server-plan.md`](docs/biomed-evidence-mcp/02-openfda-server-plan.md) §3 and [`04-pubmed-server-plan.md`](docs/biomed-evidence-mcp/04-pubmed-server-plan.md) §3.
 
 > **Heads-up for upgraders:** the clinical tool names changed in the Phase-A refactor. Old names (`search_trials`, `find_similar_trials`, `get_trial_details`) → new generic names (`semantic_search`, `find_similar`, `get_details`). `summarize_eligibility` is unchanged.
 
@@ -276,8 +276,8 @@ returns `TextContent`.
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/tjromack/mcp-suite.git
-cd mcp-suite
+git clone https://github.com/tjromack/biomed-evidence-mcp.git
+cd biomed-evidence-mcp
 uv sync
 ```
 
@@ -411,19 +411,19 @@ into your Claude Desktop config and edit the absolute path:
   "mcpServers": {
     "clinical-trials": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/biomed-evidence-mcp",
                "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "clinical" }
     },
     "fda-drugs": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/biomed-evidence-mcp",
                "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "openfda_label" }
     },
     "pubmed": {
       "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/mcp-suite",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/TO/biomed-evidence-mcp",
                "python", "-m", "core.server"],
       "env": { "UV_NATIVE_TLS": "1", "BIOMED_EVIDENCE_SOURCE": "pubmed" }
     }
@@ -454,7 +454,7 @@ The legacy `python -m biomed_evidence_mcp.server` entry point still works as a c
 | Contract + unit tests | Every tool's registered schema and response shape via `list_tools()`, plus the upstream failure modes this depends on — HTTP 429 with `Retry-After`, 5xx, timeouts, malformed bodies, unreachable DB, empty corpus | 433 passing, 182 of them contract or failure-path |
 | [Retrieval spot-check](docs/EVAL_RETRIEVAL.md) | 20 labelled questions with a known-correct trial, scored against the **full** corpus | hit@1 70% · hit@3 80% · hit@10 95% · MRR 0.77, misses published |
 | Static analysis | `ruff` lint + format, `mypy` over `core`, `servers`, `mcp_platform` | clean |
-| CI | The above on every push | [![CI](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/mcp-suite/actions/workflows/ci.yml) |
+| CI | The above on every push | [![CI](https://github.com/tjromack/biomed-evidence-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tjromack/biomed-evidence-mcp/actions/workflows/ci.yml) |
 | End-to-end tour | All 9 tools over real MCP stdio against live data (`scripts/demo_tour.py`) | 14/14 steps |
 | [Staging gates](docs/STAGING.md) | Grain, conservation, dedup, integrity and rejects over 29.5M staged rows — each query returns rows only on failure | 5/5 pass, numbers published |
 | Staging integration tests | The loader, the gates and the report against a real Postgres, not a fake — 8 tests that run in the clean-clone CI job and skip without a database | passing |
@@ -618,7 +618,7 @@ method on file even for free-tier usage. Add one in the Voyage dashboard.
 ## Project Structure
 
 ```
-mcp-suite/
+biomed-evidence-mcp/
 ├── core/                              # shared, vertical-agnostic substrate
 │   ├── document.py                    # canonical Document Pydantic model (doc 01 §4)
 │   ├── connector.py                   # DataSource Protocol (doc 01 §3)
@@ -678,7 +678,7 @@ mcp-suite/
 │   ├── export_demo_corpus.py          # regenerates the bundled demo slice
 │   └── ingest_trials.py               # compat shim → core.ingest --source clinical
 ├── src/biomed_evidence_mcp/            # Phase-A compat shims for old entry-point commands
-├── docs/                              # media/ clips, ENGINEERING_NOTES, EVAL_RETRIEVAL, mcp-suite/ strategy
+├── docs/                              # media/ clips, ENGINEERING_NOTES, EVAL_RETRIEVAL, biomed-evidence-mcp/ strategy
 └── mcp_platform/                      # authorization gate + hashed API-key CLI (off by default)
 ```
 

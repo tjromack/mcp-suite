@@ -1,6 +1,6 @@
 # 05 — Suite Build-Out Roadmap (the whole plan)
 
-The canonical, end-to-end plan for taking mcp-suite from "a template with five
+The canonical, end-to-end plan for taking biomed-evidence-mcp from "a template with five
 sources" to a complete, fresh, observable, productizable life-sciences data
 layer. [TODO.md](../../TODO.md) tracks live status against this; this doc owns
 the *shape and ordering*.
@@ -93,7 +93,7 @@ Turn the metered suite into something access-controlled (`mcp_platform/`).
 ### Phase I — Landing page + commercial validation  (was Phase C/G)
 The go-to-market track from [03-pricing-and-positioning.md](03-pricing-and-positioning.md)
 §4–5, now that there's something real to gate and measure.
-- Separate `mcp-suite-site` repo (Next.js + Vercel): hero, three value props,
+- Separate `biomed-evidence-mcp-site` repo (Next.js + Vercel): hero, three value props,
   pricing table, FAQ, free-key CTA → email capture.
 - 5 customer conversations with the CI/BD wedge; instrument free-key usage.
 - **DoD:** page deployed (Lighthouse mobile ≥ 90); free-key issuance works

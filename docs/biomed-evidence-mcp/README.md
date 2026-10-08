@@ -1,4 +1,4 @@
-# MCP Suite — Strategy & Build Docs
+# biomed-evidence-mcp — Strategy & Build Docs
 
 A plan to turn `clinical-mcp` into a monetizable *group of products*: vertical, authoritative-data
 MCP servers where the moat is curated, embedded, continuously-refreshed data — not the protocol code.

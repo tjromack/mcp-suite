@@ -12,4 +12,4 @@ LLM- or domain-specific tools.
 | `servers/openfda/` | Planned (Phase B) | openFDA `drug/label`, `drug/event`, `drug/enforcement` |
 
 See the plan in `elegant-chasing-glade.md` and the strategy docs in
-`dev-dashboard/docs/mcp-suite/`.
+`dev-dashboard/docs/biomed-evidence-mcp/`.

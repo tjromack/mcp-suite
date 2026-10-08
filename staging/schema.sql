@@ -1,4 +1,4 @@
--- mcp-suite — relational staging layer (add-on A4).
+-- biomed-evidence-mcp — relational staging layer (add-on A4).
 --
 -- This sits BESIDE `documents`, not instead of it. The canonical document
 -- table keeps each source's detail in a JSONB payload, which is the right

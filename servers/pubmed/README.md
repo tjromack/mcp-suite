@@ -37,7 +37,7 @@ Edit `term` in `server.toml` to scope the corpus (PubMed query syntax, e.g.
 
 `NCBI_API_KEY` in `.env` lifts the rate cap from 3 → 10 requests/sec
 (optional). NCBI also asks every client to send `NCBI_TOOL` (defaults to
-`mcp-suite`) and `NCBI_EMAIL` — neither is a secret.
+`biomed-evidence-mcp`) and `NCBI_EMAIL` — neither is a secret.
 
 ## Run the MCP server
 

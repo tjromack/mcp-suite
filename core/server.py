@@ -104,7 +104,7 @@ _connector: Any = None
 # with no client restart.
 _DB_UNAVAILABLE_MESSAGE = (
     "Database unavailable — this server can't reach its local corpus.\n\n"
-    "Start it with `docker compose up -d` in the mcp-suite repo, then ask again "
+    "Start it with `docker compose up -d` in the biomed-evidence-mcp repo, then ask again "
     "(no need to restart your MCP client). Check setup with "
     "`python -m core.server --selftest`."
 )
@@ -140,7 +140,7 @@ async def _lifespan(_server: FastMCP) -> AsyncIterator[None]:
         await close_pool()
 
 
-mcp = FastMCP(f"mcp-suite:{SOURCE_ID}", lifespan=_lifespan)
+mcp = FastMCP(f"biomed-evidence-mcp:{SOURCE_ID}", lifespan=_lifespan)
 
 
 # --- authorization + metering choke point ----------------------------------

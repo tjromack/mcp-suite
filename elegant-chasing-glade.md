@@ -1,8 +1,15 @@
-# Plan — Execute the MCP Suite docs
+# Plan — Execute the biomed-evidence-mcp docs
+
+> **Historical.** This is the Phase-A execution plan as written in May 2026,
+> kept because CLAUDE.md points at it for the reasoning behind the
+> `core/` + `servers/<x>/` split. Names have been updated to the current ones
+> except where a line records what something was called at the time — see the
+> branch table at the end. The repo was `clinical-mcp`, then `mcp-suite`, and
+> is now `biomed-evidence-mcp`.
 
 ## Context
 
-`docs/mcp-suite/` (PR #1, merged onto `main` at `79088ed`) lays out a three-doc strategy
+`docs/biomed-evidence-mcp/` (PR #1, merged onto `main` at `79088ed`) lays out a three-doc strategy
 for turning the `clinical-mcp` repo from a single MCP server into a monetizable
 **suite of life-sciences MCP servers** where the moat is curated, embedded,
 continuously-refreshed authoritative data — not the protocol code.
@@ -19,13 +26,13 @@ The three docs:
 
 **This planning task is strategic** — deciding *where* and *in what order* to execute
 the docs. No code is written from this plan; once you approve it, the implementation
-work happens in `clinical-mcp` (soon to be `mcp-suite`) and a new landing-page repo.
+work happens in `clinical-mcp` (soon to be `biomed-evidence-mcp`) and a new landing-page repo.
 
 Decisions confirmed via AskUserQuestion:
-1. **Repo strategy:** rename `clinical-mcp` → `mcp-suite` and refactor in place.
+1. **Repo strategy:** rename `clinical-mcp` → `biomed-evidence-mcp` and refactor in place.
 2. **Sequencing:** refactor first, then openFDA + landing in parallel (matches the
    README's recommended order).
-3. **Landing page home:** separate site repo (e.g. `mcp-suite-site`), Next.js or
+3. **Landing page home:** separate site repo (e.g. `biomed-evidence-mcp-site`), Next.js or
    Astro, deployed to Vercel.
 
 ---
@@ -49,17 +56,17 @@ The refactor is a *re-organization*, not a rewrite. Existing tests are the contr
 
 ---
 
-## Phase A — Rename and restructure `clinical-mcp` into `mcp-suite` (~2–3 days)
+## Phase A — Rename and restructure `clinical-mcp` into `biomed-evidence-mcp` (~2–3 days)
 
 This is doc 01's "First refactor PR." Treat it as one branch + one PR so the
 intermediate states don't ship a half-broken server.
 
 ### A1. Repo rename (mechanical, ~15 min)
 
-1. On GitHub: Settings → Rename `clinical-mcp` → `mcp-suite`. GitHub auto-redirects
+1. On GitHub: Settings → Rename `clinical-mcp` → `biomed-evidence-mcp`. GitHub auto-redirects
    the old URL and old `git remote` URLs for ~ a year, so anyone with a clone keeps
    working without action.
-2. Locally: `git remote set-url origin git@github.com:tjromack/mcp-suite.git`.
+2. Locally: `git remote set-url origin git@github.com:tjromack/biomed-evidence-mcp.git`.
 3. Update `README.md`'s title/badges and `pyproject.toml`'s `description`, but
    **keep `name = "biomed-evidence-mcp"` for the existing package** so anyone with
    `claude_desktop_config.json` pointing at this server keeps working until the
@@ -68,8 +75,8 @@ intermediate states don't ship a half-broken server.
 ### A2. Add the monorepo skeleton alongside the existing package (no code moved yet)
 
 ```
-mcp-suite/
-├── core/                          # NEW — will become `mcp_suite_core`
+biomed-evidence-mcp/
+├── core/                          # NEW — will become `biomed_evidence_core`
 ├── servers/clinical/              # NEW — will hold the refactored clinical server
 ├── platform/                      # NEW — placeholders for gateway/billing/deploy
 ├── src/biomed_evidence_mcp/        # UNTOUCHED at this step
@@ -151,7 +158,7 @@ imported from the server's `tools.py`).
 - `docs/PROJECT_QA.md` stays in `docs/` at suite level; the clinical-specific Q&A
   moves to `servers/clinical/PROJECT_QA.md`.
 - Run `uv sync`, `pytest`, and `ruff check` locally — all must pass.
-- Open the PR titled "Refactor clinical-mcp into mcp-suite template" with the
+- Open the PR titled "Refactor clinical-mcp into biomed-evidence-mcp template" with the
   doc 01 §9 checklist in the description.
 
 **Definition of done for Phase A:** `python -m core.ingest --source clinical
@@ -162,7 +169,7 @@ plumbing, and every previously-passing test still passes.
 
 ## Phase B — Build the openFDA server (~1 day, in parallel with C)
 
-Doc 02 in full. Land it as a separate PR against `mcp-suite` once Phase A is on `main`.
+Doc 02 in full. Land it as a separate PR against `biomed-evidence-mcp` once Phase A is on `main`.
 
 Critical pre-build step (doc 02's first note): open `https://open.fda.gov/apis/`
 and verify exact endpoint paths, field names, rate limits, and bulk-download URLs
@@ -194,7 +201,7 @@ complete, tools return cited results via an MCP client, Airflow DAG green,
 
 ---
 
-## Phase C — Landing page in `mcp-suite-site` (~2–3 days, in parallel with B)
+## Phase C — Landing page in `biomed-evidence-mcp-site` (~2–3 days, in parallel with B)
 
 Separate repo from Day 1 because Next.js infra has no business in a Python
 monorepo. Tooling: Next.js 16 (you already know it from `dev-dashboard`) + Tailwind
@@ -235,16 +242,16 @@ demand for a specific next source.
 - **Don't break the existing claude_desktop_config.json contract.** Keep the
   Python package name `biomed_evidence_mcp` and its CLI entry point intact through
   Phase A; rename internal package later once you have a published `pip install
-  mcp-suite-clinical` story.
+  biomed-evidence-mcp-clinical` story.
 - **Don't write `drug_context_for_trial` until both servers have backfilled data
   in the shared `documents` table.** It's the headline cross-sell feature, but
   it only exists because the suite exists — wire it last, demo it loud.
 - **Don't add a CMS or a multi-tenant gateway in Phase C.** The doc 03 §3 design
   notes call for metering, not for a finished billing system. The first paying
   customer can be a manual Stripe link.
-- **Don't move `docs/mcp-suite/` out of dev-dashboard.** Those three docs are the
+- **Don't move `docs/biomed-evidence-mcp/` out of dev-dashboard.** Those three docs are the
   strategic source-of-truth; they live with the developer's portfolio dashboard.
-  Reference them from `mcp-suite/README.md` and the landing-page repo, but keep
+  Reference them from `biomed-evidence-mcp/README.md` and the landing-page repo, but keep
   the canonical copies in dev-dashboard.
 
 ---
@@ -288,8 +295,13 @@ demand for a specific next source.
 | Branch | Repo | Phase | Size |
 |---|---|---|---|
 | `refactor/mcp-suite-template` | `mcp-suite` (renamed from clinical-mcp) | A1–A9 | One large PR, ~2–3 days |
-| `feature/openfda-server` | `mcp-suite` | B | One PR, ~1 day |
-| `main` | `mcp-suite-site` (new) | C | Initial scaffold + ongoing copy iteration |
+| `feature/openfda-server` | `biomed-evidence-mcp` | B | One PR, ~1 day |
+| `main` | `biomed-evidence-mcp-site` (new) | C | Initial scaffold + ongoing copy iteration |
+
+The first row keeps the names as they were: the branch really was called
+`refactor/mcp-suite-template`, and the repo really was renamed `clinical-mcp`
+→ `mcp-suite` by that PR. It was renamed again to `biomed-evidence-mcp` in
+October 2026.
 
 If Phase A's PR feels too large to review in one pass, split it at the A4/A5 boundary:
 PR-A1 = "introduce core/ skeleton + generic schema + Document/DataSource contracts,"

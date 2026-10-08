@@ -1,4 +1,4 @@
-# MCP Suite — Reusable Server Template & Connector Interface
+# biomed-evidence-mcp — Reusable Server Template & Connector Interface
 
 **Goal:** turn `clinical-mcp` from a one-off into the first instance of a repeatable
 template, so that every new server in the suite is mostly *a new connector + schema +
@@ -33,8 +33,8 @@ Three of the four tools are the *same shape* in every vertical. That's the whole
 ## 2. Target layout (monorepo, one package + per-vertical plugins)
 
 ```
-mcp-suite/
-├── core/                          # shared, published as `mcp_suite_core`
+biomed-evidence-mcp/
+├── core/                          # shared, published as `biomed_evidence_core`
 │   ├── connector.py               # DataSource Protocol (the contract)
 │   ├── document.py                # canonical Document model
 │   ├── embeddings.py              # Voyage (from clinical-mcp, lifted)

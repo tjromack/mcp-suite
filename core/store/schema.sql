@@ -1,4 +1,4 @@
--- mcp-suite — generic store schema (doc 01 §5).
+-- biomed-evidence-mcp — generic store schema (doc 01 §5).
 -- Replaces clinical-mcp's vertical-specific `trials` table with ONE
 -- `documents` table scoped by `source_id`. Every connector's normalize()
 -- emits rows of this shape; the generic tools query with WHERE source_id=$1.

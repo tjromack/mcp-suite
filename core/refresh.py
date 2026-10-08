@@ -252,7 +252,7 @@ async def run(
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Incremental refresh orchestrator for the mcp-suite. "
+        description="Incremental refresh orchestrator for the biomed-evidence-mcp. "
         "Advances per-source watermarks in source_state and runs incremental ingests."
     )
     p.add_argument(

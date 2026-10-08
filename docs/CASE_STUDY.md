@@ -1,4 +1,4 @@
-# mcp-suite — clinical trials, FDA data and literature as tools an assistant can call
+# biomed-evidence-mcp — clinical trials, FDA data and literature as tools an assistant can call
 
 Draft for the `/work` tab, following the case-study template. Image paths are repo-relative here;
 on the site they become `/media/<file>` once `docs/media/` is copied into `public/media/`.

@@ -1,6 +1,6 @@
-# mcp-suite → tjromack.com — case-study source packet
+# biomed-evidence-mcp → tjromack.com — case-study source packet
 
-Everything needed to write `src/content/projects/mcp-suite.mdx` without re-deriving anything.
+Everything needed to write `src/content/projects/biomed-evidence-mcp.mdx` without re-deriving anything.
 Validated against the site's `src/content.config.ts` schema and `_template.mdx` section order as of
 2026-09-22. Every number below is reproducible; §5 gives the command for each.
 
@@ -10,7 +10,7 @@ Validated against the site's `src/content.config.ts` schema and `_template.mdx` 
 
 ```yaml
 ---
-title: mcp-suite
+title: biomed-evidence-mcp
 summary: Six MCP servers putting clinical trials, FDA data and PubMed
   literature inside Claude as callable tools, over a document store for
   retrieval and 29.5M staged rows for analysis.
@@ -30,7 +30,7 @@ demonstrates: Retrieval over a document store with versioned relational
 featured: false
 order: 10
 draft: true
-repo: "https://github.com/tjromack/mcp-suite"
+repo: "https://github.com/tjromack/biomed-evidence-mcp"
 ---
 ```
 
@@ -38,6 +38,12 @@ Schema notes: `summary` ≤ 180 chars (this is 176 — close to the cap, so edit
 `lenses` max 3 with the first as primary. No `demo:` — there is no hosted instance, and the schema
 would rather have the field absent than a 404. If you set `cover:`, `coverAlt:` becomes required;
 `docs/media/05-cross-source.jpg` is the strongest single still.
+
+**The project was renamed `mcp-suite` → `biomed-evidence-mcp` on 2026-10-08, and the slug does not
+follow.** `/work/mcp-suite/` is published and stays published — don't rename the content file, and
+don't add a redirect for a URL nobody has yet. Only the display `title`, the prose and the `repo:`
+URL change. GitHub 301s the old repo URL, so any link already out there keeps resolving, but new
+links should use `https://github.com/tjromack/biomed-evidence-mcp`.
 
 ---
 
@@ -221,7 +227,7 @@ and a server that exited at startup when Postgres was down — which Claude Desk
 
 ### Links
 
-- Repo: https://github.com/tjromack/mcp-suite
+- Repo: https://github.com/tjromack/biomed-evidence-mcp
 - Retrieval evidence: `docs/EVAL_RETRIEVAL.md`
 - Try it: `docker compose up -d` gives a queryable instance with no API keys (README §Try it in five minutes)
 
@@ -229,7 +235,7 @@ and a server that exited at startup when Postgres was down — which Claude Desk
 
 ## 3. Media
 
-Copy `docs/media/` from the mcp-suite repo into the site's `public/images/mcp-suite/`. GIFs autoplay
+Copy `docs/media/` from the biomed-evidence-mcp repo into the site's `public/images/biomed-evidence-mcp/`. GIFs autoplay
 with no JavaScript; MP4s are ~¼ the size and include the question being typed.
 
 | File | Shows | GIF | MP4 | Suggested section |
@@ -254,13 +260,13 @@ Alt text (written to describe content, since this is what a screen reader and a 
 Markup — GIF first (no JS, works everywhere):
 
 ```html
-<img src="/images/mcp-suite/05-cross-source.gif" alt="..." width="1000" height="542" loading="lazy" />
+<img src="/images/biomed-evidence-mcp/05-cross-source.gif" alt="..." width="1000" height="542" loading="lazy" />
 ```
 
 MP4 where a little JS is acceptable:
 
 ```html
-<video src="/images/mcp-suite/05-cross-source.mp4" autoplay muted loop playsinline preload="metadata" width="1280" style="max-width:100%;border-radius:8px;"></video>
+<video src="/images/biomed-evidence-mcp/05-cross-source.mp4" autoplay muted loop playsinline preload="metadata" width="1280" style="max-width:100%;border-radius:8px;"></video>
 ```
 
 ---
@@ -272,7 +278,7 @@ in `content.config.ts` yet** — add them there first or the build fails validat
 
 ```ts
 status: "featured"
-tryIt: { label: "docker compose up", href: "https://github.com/tjromack/mcp-suite#try-it-in-five-minutes", kind: "install" }
+tryIt: { label: "docker compose up", href: "https://github.com/tjromack/biomed-evidence-mcp#try-it-in-five-minutes", kind: "install" }
 verifiedBy: ["hit@3 80% on 20 labelled questions", "5/5 staging gates over 31M rows", "clean-clone CI", "433 tests"]
 ```
 
@@ -284,7 +290,7 @@ table" describes half the project.
 
 ## 5. Numbers, and how to re-verify each
 
-Run from the mcp-suite repo. Anything not in this table should not appear in the write-up.
+Run from the biomed-evidence-mcp repo. Anything not in this table should not appear in the write-up.
 
 | Claim | Value | Verify with |
 |---|---|---|

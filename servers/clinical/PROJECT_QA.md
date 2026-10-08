@@ -7,7 +7,7 @@
 >
 > If you're skimming, jump to the [TL;DR pitches](#tldr-pitches) at the bottom.
 >
-> Companion doc: [ENGINEERING_NOTES.md](ENGINEERING_NOTES.md) — the notable
+> Companion doc: [ENGINEERING_NOTES.md](../../docs/ENGINEERING_NOTES.md) — the notable
 > moments from building it. This file is *what the project is*; that one is
 > *interesting things that happened while building it*.
 
@@ -215,22 +215,22 @@ docs, scientific papers, or a company wiki and the plumbing barely changes.
 ### 30-minute technical deep-dive
 
 Reach for [`README.md`](../README.md) (the architecture, Performance, and
-Troubleshooting sections) and [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md)
+Troubleshooting sections) and [`ENGINEERING_NOTES.md`](../../docs/ENGINEERING_NOTES.md)
 (the build war-stories). Then walk through:
 
-- [`src/biomed_evidence_mcp/server.py`](../src/biomed_evidence_mcp/server.py) —
+- [`src/biomed_evidence_mcp/server.py`](../../core/server.py) —
   FastMCP, lifespan-managed pool, thin wrappers, honest `ToolAnnotations`
-- [`src/biomed_evidence_mcp/tools/search_trials.py`](../src/biomed_evidence_mcp/tools/search_trials.py)
+- [`src/biomed_evidence_mcp/tools/search_trials.py`](../../core/tools/semantic_search.py)
   — query embedding + the single parameterized pgvector cosine query
-- [`src/biomed_evidence_mcp/ctgov.py`](../src/biomed_evidence_mcp/ctgov.py) —
+- [`src/biomed_evidence_mcp/ctgov.py`](ctgov.py) —
   the shared `curl_cffi` client, browser impersonation, configurable verify
-- [`src/biomed_evidence_mcp/embeddings.py`](../src/biomed_evidence_mcp/embeddings.py)
+- [`src/biomed_evidence_mcp/embeddings.py`](../../core/embeddings.py)
   — the Voyage wrapper, retry/backoff, `to_vector_literal`
-- [`scripts/ingest_trials.py`](../scripts/ingest_trials.py) — paginated
+- [`scripts/ingest_trials.py`](../../scripts/ingest_trials.py) — paginated
   fetch, v2 `protocolSection` parsing, idempotent upsert, multi-`--query`
-- [`tests/conftest.py`](../tests/conftest.py) — fake pool/conn fixtures, the
+- [`tests/conftest.py`](../../tests/conftest.py) — fake pool/conn fixtures, the
   mocking strategy that makes CI hermetic
-- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — the hermetic
+- [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — the hermetic
   ruff + pytest workflow
 
 ---

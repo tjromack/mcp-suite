@@ -1,7 +1,7 @@
 """Custom tools for the openFDA label server.
 
 ``summarize_safety_profile`` is the headline differentiator from the
-strategy doc (`docs/mcp-suite/02-openfda-server-plan.md` §3 #4). Given a
+strategy doc (`docs/biomed-evidence-mcp/02-openfda-server-plan.md` §3 #4). Given a
 drug name (brand or generic), it queries all three openFDA `source_id`s in
 the shared `documents` table and asks Claude to synthesize a balanced
 safety profile from labels + FAERS adverse events + recalls.

@@ -1,9 +1,9 @@
-# CLAUDE.md — mcp-suite
+# CLAUDE.md — biomed-evidence-mcp
 
 > Phase-A status: the single-server clinical-mcp has been refactored into a
 > **shared-`core/` + per-vertical-`servers/<x>/` template** (see
 > [`elegant-chasing-glade.md`](elegant-chasing-glade.md) for the execution
-> plan and [`docs/mcp-suite/`](docs/mcp-suite/) for the canonical strategy
+> plan and [`docs/biomed-evidence-mcp/`](docs/biomed-evidence-mcp/) for the canonical strategy
 > docs). The clinical server is the first vertical shipped; openFDA and
 > friends become ~one-day builds on top of the contracts.
 
@@ -29,9 +29,9 @@ Two server families are shipped:
 
 `summarize_safety_profile` is **cross-source**: given a drug name it runs one Voyage query embedding, three pgvector searches (one per openFDA `source_id`), and one Claude call to synthesize a balanced label-warnings + FAERS-signals + recalls profile. The openFDA disclaimer (research-use-only, FAERS unverified, not for clinical decisions) is appended to every response from this server family.
 
-**pubmed** server (`source_id="pubmed"`) — PubMed biomedical literature via NCBI E-utilities (esearch→efetch, stdlib XML parsing, no new dependency): 3 generic tools + `summarize_evidence` (cited synthesis over the local abstract corpus — every claim cites a retrieved PMID; not-medical-advice disclaimer). The clinical server's `evidence_for_trial` is **cross-source**: it queries the `pubmed` corpus for literature related to a trial's conditions + interventions. Plan: `docs/mcp-suite/04-pubmed-server-plan.md`.
+**pubmed** server (`source_id="pubmed"`) — PubMed biomedical literature via NCBI E-utilities (esearch→efetch, stdlib XML parsing, no new dependency): 3 generic tools + `summarize_evidence` (cited synthesis over the local abstract corpus — every claim cites a retrieved PMID; not-medical-advice disclaimer). The clinical server's `evidence_for_trial` is **cross-source**: it queries the `pubmed` corpus for literature related to a trial's conditions + interventions. Plan: `docs/biomed-evidence-mcp/04-pubmed-server-plan.md`.
 
-**Build posture (2026-06): portfolio-first** — the strategy docs' validation gate (don't build servers #3–4 until a paying customer exists) is relaxed; servers are treated as engineering milestones demonstrating the suite thesis. The live roadmap is in `TODO.md` (full plan + ordering in `docs/mcp-suite/05-roadmap.md`); commercial validation (landing page + customer conversations) remains a later phase.
+**Build posture (2026-06): portfolio-first** — the strategy docs' validation gate (don't build servers #3–4 until a paying customer exists) is relaxed; servers are treated as engineering milestones demonstrating the suite thesis. The live roadmap is in `TODO.md` (full plan + ordering in `docs/biomed-evidence-mcp/05-roadmap.md`); commercial validation (landing page + customer conversations) remains a later phase.
 
 **Cross-cutting infra:** `core/refresh.py` (Phase F) runs watermark-driven incremental refresh per source (`--source`/`--all`/`--due`/`--full`), tracking state in the `source_state` table and reading each server.toml's `[refresh] cadence`. `core/metering.py` (Phase G) records one `tool_calls` row per MCP tool invocation (best-effort, never breaks a tool); every server exposes a `corpus_status` diagnostic (`core/tools/corpus_status.py`) reporting per-source size/freshness + 7-day usage. `mcp_platform/` (Phase H) is the authorization gate: `gate.authorize()` enforces API-key tiers (free/pro/suite/enterprise) — monthly call cap (from the `tool_calls` meter) + cross-server-tool gating — and `keys.py` is the issue/list/revoke CLI (hashed storage). Off by default (`AUTH_ENABLED=false`). In `core/server.py`, **every** tool routes through `_serve(tool_name, factory)` (gate → meter); custom tools are wrapped by `_register_custom` (signature-preserving for FastMCP schema inference). The key is presented per-process via `BIOMED_EVIDENCE_API_KEY`.
 
@@ -77,7 +77,7 @@ and (post-A) a re-usable architectural template for adding new verticals.
 ## Project Structure
 
 ```
-mcp-suite/
+biomed-evidence-mcp/
 ├── CLAUDE.md · README.md · TODO.md · PROMPT.md
 ├── pyproject.toml          # uv-managed project + dependencies
 ├── .env.example            # all required env vars with comments

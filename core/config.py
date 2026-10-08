@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # identification NCBI asks every E-utilities client to send so they can
     # contact you before throttling — they are not secrets.
     ncbi_api_key: str = ""
-    ncbi_tool: str = "mcp-suite"
+    ncbi_tool: str = "biomed-evidence-mcp"
     ncbi_email: str = ""
 
     embedding_model: str = "voyage-3"

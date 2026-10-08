@@ -1,4 +1,4 @@
-"""Guided demo tour: exercise every mcp-suite tool over real MCP stdio.
+"""Guided demo tour: exercise every biomed-evidence-mcp tool over real MCP stdio.
 
 Launches each server exactly the way Claude Desktop does (``python -m
 core.server`` with ``BIOMED_EVIDENCE_SOURCE``), then walks one story end to end:
@@ -320,7 +320,7 @@ async def run(args: argparse.Namespace) -> int:
         for i, s in enumerate(TOUR, start=1)
         if (not args.only or i in args.only) and not (args.no_ai and s.ai)
     ]
-    print(bold("\nmcp-suite demo tour"))
+    print(bold("\nbiomed-evidence-mcp demo tour"))
     print(
         _wrap(
             f"Following {TRIAL} (KEYNOTE-937, pembrolizumab after liver-cancer resection) "
@@ -331,7 +331,7 @@ async def run(args: argparse.Namespace) -> int:
     )
 
     results: list[Result] = []
-    log_path = Path(tempfile.gettempdir()) / "mcp_suite_demo_tour.log"
+    log_path = Path(tempfile.gettempdir()) / "biomed_evidence_demo_tour.log"
     with log_path.open("w", encoding="utf-8") as errlog:
         async with AsyncExitStack() as stack:
             servers = Servers(stack, errlog)
@@ -397,7 +397,7 @@ async def run(args: argparse.Namespace) -> int:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Guided tour of every mcp-suite tool.")
+    p = argparse.ArgumentParser(description="Guided tour of every biomed-evidence-mcp tool.")
     p.add_argument("--pause", action="store_true", help="Wait for Enter before each step.")
     p.add_argument("--only", type=int, nargs="+", help="Run only these step numbers.")
     p.add_argument("--no-ai", action="store_true", help="Skip steps that call Claude.")

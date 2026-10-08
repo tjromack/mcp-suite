@@ -207,7 +207,7 @@ async def run(
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generic ingest runner for the mcp-suite. "
+        description="Generic ingest runner for the biomed-evidence-mcp. "
         "Discovers servers/<source>/server.toml + connector + config."
     )
     parser.add_argument("--source", required=True, help="source_id (e.g. 'clinical').")

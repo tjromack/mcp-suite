@@ -1,4 +1,4 @@
-# TODO — mcp-suite
+# TODO — biomed-evidence-mcp
 
 **Status (2026-06): Phases 1–4 + A + B shipped & merged; the openFDA cross-server tool (PR #12) and reliability hardening (PR #13) are merged; servers #3 (PubMed) + #4 (Drugs@FDA approvals) + `evidence_for_trial` + Phase F (incremental refresh orchestrator) + Phase G (tool-call metering + `corpus_status`) + Phase H (API-key/tier authorization gate) are built on this branch. ruff + mypy clean.**
 
@@ -13,7 +13,7 @@
 - **PR #13** — openFDA retry+backoff on transient 5xx + `api_key` scrubbed from logs.
 
 ### On this branch (Phases D + E — servers #3 and #4)
-- **Phase D — PubMed server** (`source_id="pubmed"`) — `PubMedConnector` over NCBI E-utilities (esearch→efetch, stdlib XML parsing, no new dep), `summarize_evidence` cited-synthesis custom tool, and the **`evidence_for_trial`** clinical→pubmed cross-server tool. NCBI API verified against live responses first. Plan: [`docs/mcp-suite/04-pubmed-server-plan.md`](docs/mcp-suite/04-pubmed-server-plan.md).
+- **Phase D — PubMed server** (`source_id="pubmed"`) — `PubMedConnector` over NCBI E-utilities (esearch→efetch, stdlib XML parsing, no new dep), `summarize_evidence` cited-synthesis custom tool, and the **`evidence_for_trial`** clinical→pubmed cross-server tool. NCBI API verified against live responses first. Plan: [`docs/biomed-evidence-mcp/04-pubmed-server-plan.md`](docs/biomed-evidence-mcp/04-pubmed-server-plan.md).
 - **Phase E — Drugs@FDA server** (`source_id="openfda_drugsfda"`) — `OpenFDADrugsFDAConnector(OpenFDAConnectorBase)` for FDA approval history (application/sponsor/products/submissions + marketing & approval status), generic tools only. Folded into `drug_context_for_trial` as a **4th** cross-source (approvals + labels + FAERS + recalls per intervention drug). API + nested-date incremental query verified against live `api.fda.gov` first. Suite 148 → 177 tests.
 - Remaining for both: live backfill + Claude Desktop end-to-end demo (needs network + keys; run off-proxy).
 
@@ -21,11 +21,11 @@
 
 ## Build posture — portfolio-first (2026-06 decision)
 
-The strategy docs ([03-pricing-and-positioning.md](docs/mcp-suite/03-pricing-and-positioning.md) §5) originally **gated** servers #3–4 behind a paying Suite customer or usage data. For the portfolio build-out that gate is **relaxed**: servers are engineering milestones that demonstrate the suite thesis (authoritative + cited + cross-source). The commercial-validation track is preserved but **decoupled from "keep building"** — it's now **Phase I**.
+The strategy docs ([03-pricing-and-positioning.md](docs/biomed-evidence-mcp/03-pricing-and-positioning.md) §5) originally **gated** servers #3–4 behind a paying Suite customer or usage data. For the portfolio build-out that gate is **relaxed**: servers are engineering milestones that demonstrate the suite thesis (authoritative + cited + cross-source). The commercial-validation track is preserved but **decoupled from "keep building"** — it's now **Phase I**.
 
 ### Roadmap to the whole suite
 
-Full plan + per-phase definition-of-done: **[docs/mcp-suite/05-roadmap.md](docs/mcp-suite/05-roadmap.md)**. The dependency order is *breadth → freshness → observability → productization → go-to-market → more breadth*.
+Full plan + per-phase definition-of-done: **[docs/biomed-evidence-mcp/05-roadmap.md](docs/biomed-evidence-mcp/05-roadmap.md)**. The dependency order is *breadth → freshness → observability → productization → go-to-market → more breadth*.
 
 | Phase | Deliverable | State |
 |---|---|---|
@@ -36,7 +36,7 @@ Full plan + per-phase definition-of-done: **[docs/mcp-suite/05-roadmap.md](docs/
 | **F** | **Freshness & data ops** — `core/refresh.py` orchestrator, `source_state` watermarks, per-source cadence, example scheduler | ✅ this branch |
 | **G** | **Observability & metering** — `tool_calls` metering on every tool + `corpus_status` diagnostic | ✅ this branch |
 | **H** | **Platform / gateway** (`mcp_platform/`) — API keys, tiers, per-key rate limits + cross-server gating | ✅ this branch |
-| **I** | **Landing page + commercial validation** — `mcp-suite-site`, free-key CTA, 5 conversations (was Phase C/G) | ⬜ **next** |
+| **I** | **Landing page + commercial validation** — `biomed-evidence-mcp-site`, free-key CTA, 5 conversations (was Phase C/G) | ⬜ **next** |
 | **J** | **Breadth on demand** — servers #5+ (NPI, RxNorm), only on a usage/cross-sell signal | ⬜ |
 | **A4** | **Relational staging** (`staging/`) — FAERS quarterly extracts + pinned AACT archive as joinable tables beside `documents`, with grain / conservation / dedup / integrity / reject gates | ✅ 2026-10 |
 
@@ -156,7 +156,7 @@ Phases 1–4 below are kept as the build record.
 - [x] Record demo GIF of Claude Desktop interaction; embedded in README (`docs/demo.gif`)
 - [x] Final README pass: fixed schema-apply command (PowerShell), multi-query example, Claude Desktop §, added Performance + Troubleshooting, updated structure
 - [x] Repo initialized + pushed to **private** GitHub repo `tjromack/clinical-mcp` (`.env` & `.claude/settings.local.json` excluded; `uv.lock` + `.gitattributes` tracked; initial commit `e1c9ccb`)
-- [x] Tag `v0.1.0` release + release notes — annotated tag `v0.1.0`, GitHub release published (https://github.com/tjromack/mcp-suite/releases/tag/v0.1.0)
+- [x] Tag `v0.1.0` release + release notes — annotated tag `v0.1.0`, GitHub release published (https://github.com/tjromack/biomed-evidence-mcp/releases/tag/v0.1.0)
 - [ ] **Ship it**: share on LinkedIn/Twitter with the demo GIF (**USER**: personal action; flip repo public when ready)
 
 ## Phase 4 — Portfolio Polish & Future Work
