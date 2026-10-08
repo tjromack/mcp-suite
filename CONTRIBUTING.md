@@ -55,14 +55,14 @@ without the MCP runtime or a live DB. Use an existing tool as a template —
 `tools/search_trials.py` (needs the DB pool) or `tools/get_trial_details.py`
 (no DB, calls an external API).
 
-### 1. Write the core function — `src/clinical_trial_mcp/tools/my_tool.py`
+### 1. Write the core function — `src/biomed_evidence_mcp/tools/my_tool.py`
 
 ```python
 import logging
 import asyncpg
 from mcp.types import TextContent
 
-logger = logging.getLogger("clinical_trial_mcp.my_tool")
+logger = logging.getLogger("biomed_evidence_mcp.my_tool")
 
 
 async def my_tool(pool: asyncpg.Pool, some_arg: str) -> list[TextContent]:
@@ -83,10 +83,10 @@ async def my_tool(pool: asyncpg.Pool, some_arg: str) -> list[TextContent]:
 Dependencies (pool, API clients) are **parameters**, not module globals — that
 is what makes the function mockable in tests.
 
-### 2. Register the thin wrapper in `src/clinical_trial_mcp/server.py`
+### 2. Register the thin wrapper in `src/biomed_evidence_mcp/server.py`
 
 ```python
-from clinical_trial_mcp.tools.my_tool import my_tool as _my_tool
+from biomed_evidence_mcp.tools.my_tool import my_tool as _my_tool
 
 @mcp.tool(
     annotations=ToolAnnotations(
@@ -112,7 +112,7 @@ params — there is no `input_schema` kwarg in this MCP SDK version.
 
 Use the `mock_pool` / `mock_conn` fixtures from `tests/conftest.py`. Patch
 external clients at the tool's import boundary (e.g.
-`clinical_trial_mcp.tools.my_tool.fetch_study`). Cover: happy path, a
+`biomed_evidence_mcp.tools.my_tool.fetch_study`). Cover: happy path, a
 validation/empty input case, and "error is returned as TextContent, not
 raised".
 
@@ -126,5 +126,5 @@ uv run ruff check . && uv run ruff format --check .
 Confirm registration:
 
 ```bash
-uv run python -c "import asyncio; from clinical_trial_mcp.server import mcp; print([t.name for t in asyncio.run(mcp.list_tools())])"
+uv run python -c "import asyncio; from biomed_evidence_mcp.server import mcp; print([t.name for t in asyncio.run(mcp.list_tools())])"
 ```

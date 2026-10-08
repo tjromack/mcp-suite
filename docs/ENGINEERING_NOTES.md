@@ -69,7 +69,7 @@ Each note follows the same five-field shape:
   live validation pass before merge. Also: turning a driver-level error into a
   user-readable tool error is part of the fix, not an afterthought.
 - **Where to look**:
-  [`src/clinical_trial_mcp/tools/search_trials.py`](../src/clinical_trial_mcp/tools/search_trials.py)
+  [`src/biomed_evidence_mcp/tools/search_trials.py`](../src/biomed_evidence_mcp/tools/search_trials.py)
   (`date.fromisoformat` parse + clean error; `$8::date` bind);
   [`tests/test_search_trials.py`](../tests/test_search_trials.py)
   (`test_invalid_min_start_date_returns_clean_error`, parsed-date assertion);
@@ -101,9 +101,9 @@ Each note follows the same five-field shape:
   LEFT-JOIN degrade path was a deliberate correctness choice, then confirmed
   against real data rather than assumed.
 - **Where to look**:
-  [`src/clinical_trial_mcp/db/schema.sql`](../src/clinical_trial_mcp/db/schema.sql)
+  [`src/biomed_evidence_mcp/db/schema.sql`](../src/biomed_evidence_mcp/db/schema.sql)
   (generated `search_tsv` + GIN index);
-  [`src/clinical_trial_mcp/tools/search_trials.py`](../src/clinical_trial_mcp/tools/search_trials.py)
+  [`src/biomed_evidence_mcp/tools/search_trials.py`](../src/biomed_evidence_mcp/tools/search_trials.py)
   (`_SEARCH_SQL` CTEs `base`/`vec`/`fts`, RRF score, `_RRF_K`);
   [`tests/test_search_trials.py`](../tests/test_search_trials.py) (hybrid
   param wiring); branch `feat/hybrid-search`.
@@ -125,9 +125,9 @@ Each note follows the same five-field shape:
   most naive caches get wrong), and recognizing that introducing process-
   global state creates a test-isolation obligation, not just a feature.
 - **Where to look**:
-  [`src/clinical_trial_mcp/cache.py`](../src/clinical_trial_mcp/cache.py)
+  [`src/biomed_evidence_mcp/cache.py`](../src/biomed_evidence_mcp/cache.py)
   (`TTLCache`, injectable clock, `enabled` gate);
-  [`src/clinical_trial_mcp/tools/get_trial_details.py`](../src/clinical_trial_mcp/tools/get_trial_details.py)
+  [`src/biomed_evidence_mcp/tools/get_trial_details.py`](../src/biomed_evidence_mcp/tools/get_trial_details.py)
   (`_CACHE`, cache-around-fetch, no negative caching);
   [`tests/test_cache.py`](../tests/test_cache.py) and the cache tests +
   `_clear_cache` fixture in
@@ -158,9 +158,9 @@ Each note follows the same five-field shape:
 - **Where to look**: [`pyproject.toml`](../pyproject.toml) `[tool.mypy]`;
   [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) "Type check"
   step; the fixes in
-  [`src/clinical_trial_mcp/tools/get_trial_details.py`](../src/clinical_trial_mcp/tools/get_trial_details.py),
-  [`src/clinical_trial_mcp/tools/summarize_eligibility.py`](../src/clinical_trial_mcp/tools/summarize_eligibility.py),
-  [`src/clinical_trial_mcp/ctgov.py`](../src/clinical_trial_mcp/ctgov.py),
+  [`src/biomed_evidence_mcp/tools/get_trial_details.py`](../src/biomed_evidence_mcp/tools/get_trial_details.py),
+  [`src/biomed_evidence_mcp/tools/summarize_eligibility.py`](../src/biomed_evidence_mcp/tools/summarize_eligibility.py),
+  [`src/biomed_evidence_mcp/ctgov.py`](../src/biomed_evidence_mcp/ctgov.py),
   and the real-`TextBlock` fixture in
   [`tests/conftest.py`](../tests/conftest.py); branch `feat/ci-mypy`.
 
@@ -185,7 +185,7 @@ Each note follows the same five-field shape:
   because the dominant failure modes are whole-account/rate-limit, not
   per-text, and the wasted-call reduction outweighs it.
 - **Where to look**:
-  [`src/clinical_trial_mcp/embeddings.py`](../src/clinical_trial_mcp/embeddings.py)
+  [`src/biomed_evidence_mcp/embeddings.py`](../src/biomed_evidence_mcp/embeddings.py)
   (`embed_texts`, and `embed_text` delegating to it);
   [`scripts/ingest_trials.py`](../scripts/ingest_trials.py)
   (`embed_and_upsert_batch`, now one call + `zip(embeddable, vectors)`);
@@ -210,9 +210,9 @@ Each note follows the same five-field shape:
   reasoning, instead of a misleading "pgvector index ✓" claim a reviewer would
   see through.
 - **Where to look**: [`README.md`](../README.md) §Performance;
-  `src/clinical_trial_mcp/db/schema.sql` (the `ivfflat … vector_cosine_ops`
+  `src/biomed_evidence_mcp/db/schema.sql` (the `ivfflat … vector_cosine_ops`
   index); the search query in
-  [`src/clinical_trial_mcp/tools/search_trials.py`](../src/clinical_trial_mcp/tools/search_trials.py).
+  [`src/biomed_evidence_mcp/tools/search_trials.py`](../src/biomed_evidence_mcp/tools/search_trials.py).
 
 ### Claude Desktop "didn't see" the server — root-caused from timestamps, not guesswork
 
@@ -251,14 +251,14 @@ Each note follows the same five-field shape:
   unset isn't neutral, it actively mislabels safe tools as dangerous. Setting
   them honestly (not just `readOnlyHint=True` everywhere) is the point.
 - **Where to look**:
-  [`src/clinical_trial_mcp/server.py`](../src/clinical_trial_mcp/server.py)
+  [`src/biomed_evidence_mcp/server.py`](../src/biomed_evidence_mcp/server.py)
   — the `ToolAnnotations(...)` block on each `@mcp.tool()`; commit `e1c9ccb`.
 
 ### Dev deps in the wrong table made pytest silently run from another project's venv
 
 - **When**: 2026-05-15 (Phase 2 — first full test run)
 - **What happened**: `uv run pytest` failed with
-  `ModuleNotFoundError: No module named 'clinical_trial_mcp'` *plus* a
+  `ModuleNotFoundError: No module named 'biomed_evidence_mcp'` *plus* a
   `PytestConfigWarning: Unknown config option: asyncio_mode`, and the pytest
   banner showed a path under `C:\dev\nba-parquet\.venv`. The dev dependencies
   were under `[project.optional-dependencies]`, which `uv sync` does **not**
@@ -289,9 +289,9 @@ Each note follows the same five-field shape:
   a CI pipeline that anyone can trust because it can't be flaky on external
   state.
 - **Where to look**: contrast
-  [`src/clinical_trial_mcp/tools/search_trials.py`](../src/clinical_trial_mcp/tools/search_trials.py)
+  [`src/biomed_evidence_mcp/tools/search_trials.py`](../src/biomed_evidence_mcp/tools/search_trials.py)
   (pool-injected core) with
-  [`src/clinical_trial_mcp/server.py`](../src/clinical_trial_mcp/server.py)
+  [`src/biomed_evidence_mcp/server.py`](../src/biomed_evidence_mcp/server.py)
   (thin wrapper); [`tests/conftest.py`](../tests/conftest.py) fake pool
   fixtures; [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
@@ -313,9 +313,9 @@ Each note follows the same five-field shape:
   abstraction is what makes a provider swap a 5-file change instead of a
   rewrite — plus the schema/embedding-dimension coupling that's easy to miss.
 - **Where to look**:
-  [`src/clinical_trial_mcp/embeddings.py`](../src/clinical_trial_mcp/embeddings.py)
+  [`src/biomed_evidence_mcp/embeddings.py`](../src/biomed_evidence_mcp/embeddings.py)
   (`embed_text`, `to_vector_literal`),
-  `src/clinical_trial_mcp/db/schema.sql` (`vector(1024)`),
+  `src/biomed_evidence_mcp/db/schema.sql` (`vector(1024)`),
   [`CLAUDE.md`](../CLAUDE.md) tech-stack rationale; commit `e1c9ccb`.
 
 ### A "rate-limit bug" that was actually an unprovisioned Voyage account
@@ -333,7 +333,7 @@ Each note follows the same five-field shape:
   from a *code* problem before "fixing" code that isn't broken — and the
   reflex to document an external-service gotcha rather than just move on.
 - **Where to look**:
-  [`src/clinical_trial_mcp/embeddings.py`](../src/clinical_trial_mcp/embeddings.py)
+  [`src/biomed_evidence_mcp/embeddings.py`](../src/biomed_evidence_mcp/embeddings.py)
   (the retry loop — unchanged because it was correct); README §Troubleshooting
   "Voyage embeddings throttle."
 
@@ -358,11 +358,11 @@ Each note follows the same five-field shape:
   layer — secure by default, explicitly relaxable only where libcurl makes the
   proper fix impossible.
 - **Where to look**:
-  [`src/clinical_trial_mcp/__init__.py`](../src/clinical_trial_mcp/__init__.py)
+  [`src/biomed_evidence_mcp/__init__.py`](../src/biomed_evidence_mcp/__init__.py)
   (`truststore.inject_into_ssl()`),
-  [`src/clinical_trial_mcp/config.py`](../src/clinical_trial_mcp/config.py)
+  [`src/biomed_evidence_mcp/config.py`](../src/biomed_evidence_mcp/config.py)
   (`ctgov_ssl_verify`, `ctgov_ca_bundle`),
-  [`src/clinical_trial_mcp/ctgov.py`](../src/clinical_trial_mcp/ctgov.py)
+  [`src/biomed_evidence_mcp/ctgov.py`](../src/biomed_evidence_mcp/ctgov.py)
   (`verify_setting()`); commit `e1c9ccb`.
 
 ### ClinicalTrials.gov is behind Akamai Bot Manager — beat it with TLS impersonation
@@ -376,13 +376,13 @@ Each note follows the same five-field shape:
   through `curl_cffi` with `impersonate="chrome"` (a real browser TLS
   fingerprint). Deliberately set *no* custom User-Agent, because Akamai
   cross-checks the UA against the TLS fingerprint — a courtesy
-  `clinical-trial-mcp/1.0` UA re-trips the block.
+  `biomed-evidence-mcp/1.0` UA re-trips the block.
 - **What it demonstrates**: Diagnosing a bot-protection 403 from the
   Python-vs-Windows asymmetry instead of endlessly tweaking headers, and
   knowing the counter-intuitive detail that a "polite" custom User-Agent
   *defeats* the fix because it breaks fingerprint consistency.
 - **Where to look**:
-  [`src/clinical_trial_mcp/ctgov.py`](../src/clinical_trial_mcp/ctgov.py)
+  [`src/biomed_evidence_mcp/ctgov.py`](../src/biomed_evidence_mcp/ctgov.py)
   (the single shared `curl_cffi` client, `impersonate=settings.ctgov_impersonate`,
   no UA); [`CLAUDE.md`](../CLAUDE.md) §"ClinicalTrials.gov API"; README
   §Troubleshooting; commit `e1c9ccb`.

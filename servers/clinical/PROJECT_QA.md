@@ -218,13 +218,13 @@ Reach for [`README.md`](../README.md) (the architecture, Performance, and
 Troubleshooting sections) and [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md)
 (the build war-stories). Then walk through:
 
-- [`src/clinical_trial_mcp/server.py`](../src/clinical_trial_mcp/server.py) —
+- [`src/biomed_evidence_mcp/server.py`](../src/biomed_evidence_mcp/server.py) —
   FastMCP, lifespan-managed pool, thin wrappers, honest `ToolAnnotations`
-- [`src/clinical_trial_mcp/tools/search_trials.py`](../src/clinical_trial_mcp/tools/search_trials.py)
+- [`src/biomed_evidence_mcp/tools/search_trials.py`](../src/biomed_evidence_mcp/tools/search_trials.py)
   — query embedding + the single parameterized pgvector cosine query
-- [`src/clinical_trial_mcp/ctgov.py`](../src/clinical_trial_mcp/ctgov.py) —
+- [`src/biomed_evidence_mcp/ctgov.py`](../src/biomed_evidence_mcp/ctgov.py) —
   the shared `curl_cffi` client, browser impersonation, configurable verify
-- [`src/clinical_trial_mcp/embeddings.py`](../src/clinical_trial_mcp/embeddings.py)
+- [`src/biomed_evidence_mcp/embeddings.py`](../src/biomed_evidence_mcp/embeddings.py)
   — the Voyage wrapper, retry/backoff, `to_vector_literal`
 - [`scripts/ingest_trials.py`](../scripts/ingest_trials.py) — paginated
   fetch, v2 `protocolSection` parsing, idempotent upsert, multi-`--query`

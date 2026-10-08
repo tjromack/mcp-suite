@@ -35,7 +35,7 @@ Decisions confirmed via AskUserQuestion:
 From `data/projects.json` and the doc 01 anatomy table:
 
 - 41 files, Python 3.11, MIT-licensed, MVP status, `private_intent: open`.
-- Package: `src/clinical_trial_mcp/` with `cache.py`, `config.py`, `ctgov.py`,
+- Package: `src/biomed_evidence_mcp/` with `cache.py`, `config.py`, `ctgov.py`,
   `embeddings.py`, `server.py`, `db/{connection,schema.sql}`, and `tools/{search_trials,
   get_trial_details, find_similar_trials, summarize_eligibility}.py`.
 - Tests already cover every tool + `cache`/`config`/`ctgov`/`embeddings` —
@@ -61,7 +61,7 @@ intermediate states don't ship a half-broken server.
    working without action.
 2. Locally: `git remote set-url origin git@github.com:tjromack/mcp-suite.git`.
 3. Update `README.md`'s title/badges and `pyproject.toml`'s `description`, but
-   **keep `name = "clinical-trial-mcp"` for the existing package** so anyone with
+   **keep `name = "biomed-evidence-mcp"` for the existing package** so anyone with
    `claude_desktop_config.json` pointing at this server keeps working until the
    monorepo layout is ready.
 
@@ -72,7 +72,7 @@ mcp-suite/
 ├── core/                          # NEW — will become `mcp_suite_core`
 ├── servers/clinical/              # NEW — will hold the refactored clinical server
 ├── platform/                      # NEW — placeholders for gateway/billing/deploy
-├── src/clinical_trial_mcp/        # UNTOUCHED at this step
+├── src/biomed_evidence_mcp/        # UNTOUCHED at this step
 └── pyproject.toml                 # add workspace/extras stubs only
 ```
 
@@ -86,11 +86,11 @@ preserving renames** (`git mv`), don't rewrite:
 
 | From | To | Notes |
 |---|---|---|
-| `src/clinical_trial_mcp/embeddings.py` | `core/embeddings.py` | Unchanged |
-| `src/clinical_trial_mcp/cache.py` | `core/cache.py` | Unchanged |
-| `src/clinical_trial_mcp/db/connection.py` | `core/store/connection.py` | Unchanged |
-| `src/clinical_trial_mcp/db/schema.sql` | `core/store/schema.sql` | Rewritten to the **generic, `source_id`-scoped schema** in doc 01 §5 |
-| `src/clinical_trial_mcp/config.py` | `core/config.py` | Pydantic base settings; clinical extends it |
+| `src/biomed_evidence_mcp/embeddings.py` | `core/embeddings.py` | Unchanged |
+| `src/biomed_evidence_mcp/cache.py` | `core/cache.py` | Unchanged |
+| `src/biomed_evidence_mcp/db/connection.py` | `core/store/connection.py` | Unchanged |
+| `src/biomed_evidence_mcp/db/schema.sql` | `core/store/schema.sql` | Rewritten to the **generic, `source_id`-scoped schema** in doc 01 §5 |
+| `src/biomed_evidence_mcp/config.py` | `core/config.py` | Pydantic base settings; clinical extends it |
 
 The existing tests (`test_cache.py`, `test_embeddings.py`, `test_config.py`) move
 under `tests/core/` and update their imports. They are the only contract.
@@ -137,7 +137,7 @@ data, generic plumbing. **If those tests stay green, the refactor is correct.**
 
 ### A8. Wire `core/server.py` to read `server.toml` and start the MCP server
 
-This replaces the existing `src/clinical_trial_mcp/server.py` — same MCP wiring,
+This replaces the existing `src/biomed_evidence_mcp/server.py` — same MCP wiring,
 but `tools` come from the toml-driven registry (generic from the core + custom
 imported from the server's `tools.py`).
 
@@ -233,7 +233,7 @@ demand for a specific next source.
 ## Notes on what NOT to do
 
 - **Don't break the existing claude_desktop_config.json contract.** Keep the
-  Python package name `clinical_trial_mcp` and its CLI entry point intact through
+  Python package name `biomed_evidence_mcp` and its CLI entry point intact through
   Phase A; rename internal package later once you have a published `pip install
   mcp-suite-clinical` story.
 - **Don't write `drug_context_for_trial` until both servers have backfilled data

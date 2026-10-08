@@ -28,4 +28,4 @@ ENV PYTHONUNBUFFERED=1
 
 # Default: run the stdio server. Override for the ingest script, e.g.
 #   docker compose run --rm mcp uv run python scripts/ingest_trials.py --max 50
-CMD ["uv", "run", "python", "-m", "clinical_trial_mcp.server"]
+CMD ["uv", "run", "python", "-m", "biomed_evidence_mcp.server"]

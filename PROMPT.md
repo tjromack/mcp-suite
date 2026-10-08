@@ -14,7 +14,7 @@ Work through the steps below in this exact order. Do not skip ahead to Phase 2 (
 
 ## Step 1 — Project scaffold
 
-1. Initialize a `uv` project: `uv init clinical-trial-mcp --python 3.11`
+1. Initialize a `uv` project: `uv init biomed-evidence-mcp --python 3.11`
 2. Add all Phase 1 dependencies to `pyproject.toml`:
    ```
    mcp, asyncpg, anthropic, voyageai, curl-cffi, httpx, python-dotenv, pydantic-settings, truststore, ruff, pytest, pytest-asyncio
@@ -36,11 +36,11 @@ Work through the steps below in this exact order. Do not skip ahead to Phase 2 (
 
 ## Step 3 — Config
 
-Write `src/clinical_trial_mcp/config.py` using `pydantic-settings`. Load every variable listed in the "Environment Variables" section of CLAUDE.md. Provide sensible defaults for `EMBEDDING_MODEL`, `SUMMARY_MODEL`, `SEARCH_TOP_K`, `DEFAULT_INGEST_QUERY`, and `DEFAULT_INGEST_MAX`. The `Settings` object should be importable as a singleton via `from clinical_trial_mcp.config import settings`.
+Write `src/biomed_evidence_mcp/config.py` using `pydantic-settings`. Load every variable listed in the "Environment Variables" section of CLAUDE.md. Provide sensible defaults for `EMBEDDING_MODEL`, `SUMMARY_MODEL`, `SEARCH_TOP_K`, `DEFAULT_INGEST_QUERY`, and `DEFAULT_INGEST_MAX`. The `Settings` object should be importable as a singleton via `from biomed_evidence_mcp.config import settings`.
 
 ## Step 4 — Database schema
 
-Write `src/clinical_trial_mcp/db/schema.sql` exactly as specified in the Data Model section of CLAUDE.md:
+Write `src/biomed_evidence_mcp/db/schema.sql` exactly as specified in the Data Model section of CLAUDE.md:
 - `CREATE EXTENSION IF NOT EXISTS vector;`
 - The `trials` table with all columns
 - The `ivfflat` index with `lists = 100`
@@ -48,7 +48,7 @@ Write `src/clinical_trial_mcp/db/schema.sql` exactly as specified in the Data Mo
 
 ## Step 5 — DB connection pool
 
-Write `src/clinical_trial_mcp/db/connection.py`:
+Write `src/biomed_evidence_mcp/db/connection.py`:
 - `async def init_pool(dsn: str) -> asyncpg.Pool` — creates and caches a pool as a module-level variable
 - `def get_pool() -> asyncpg.Pool` — returns the cached pool, raises `RuntimeError` if not initialized
 - `async def close_pool()` — closes the pool gracefully
@@ -56,7 +56,7 @@ Write `src/clinical_trial_mcp/db/connection.py`:
 
 ## Step 6 — Embedding wrapper
 
-Write `src/clinical_trial_mcp/embeddings.py` (uses the Voyage AI SDK — Anthropic's recommended embedding partner; Anthropic itself has no embeddings API):
+Write `src/biomed_evidence_mcp/embeddings.py` (uses the Voyage AI SDK — Anthropic's recommended embedding partner; Anthropic itself has no embeddings API):
 - `async def embed_text(text: str, *, model: str | None = None, input_type: str = "document") -> list[float]`
 - Pass `input_type="document"` for stored content, `"query"` for live user queries (Voyage tunes vectors per type)
 - Guard: if `text.strip()` is empty, raise `ValueError("Cannot embed empty text")`

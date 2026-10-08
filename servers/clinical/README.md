@@ -41,7 +41,7 @@ delegates to the command above with `--source clinical`.
 # Defaults to source_id="clinical" via BIOMED_EVIDENCE_SOURCE env var.
 uv run python -m core.server
 # or via the compat shim that existing claude_desktop_config.json entries use:
-uv run python -m clinical_trial_mcp.server
+uv run python -m biomed_evidence_mcp.server
 ```
 
 ## Phase-A tool name changes (heads-up for upgraders)
@@ -55,5 +55,5 @@ The Phase-A refactor changed the names Claude sees:
 | `get_trial_details` | `get_details` |
 | `summarize_eligibility` | `summarize_eligibility` *(unchanged — vertical-specific)* |
 
-Existing `claude_desktop_config.json` entries (`python -m clinical_trial_mcp.server`)
+Existing `claude_desktop_config.json` entries (`python -m biomed_evidence_mcp.server`)
 keep working through the compat shim — only the tool *names* in the picker change.

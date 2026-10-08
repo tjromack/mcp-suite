@@ -121,7 +121,7 @@ mcp-suite/
 ├── demo/seed/              # 300-doc corpus, loaded on first container boot
 ├── evals/retrieval/        # labelled gold set behind docs/EVAL_RETRIEVAL.md
 ├── scripts/                # ingest_trials · eval_retrieval · demo_tour · export_demo_corpus
-├── src/clinical_trial_mcp/ # compat shim preserving pre-refactor import paths
+├── src/biomed_evidence_mcp/ # compat shim preserving pre-refactor import paths
 └── tests/                  # core · clinical · openfda · pubmed · platform · staging
 ```
 

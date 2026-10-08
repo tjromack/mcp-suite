@@ -387,7 +387,7 @@ Denied calls return a clean `Access denied: …` message (never an exception) an
 ### 6. Run the MCP server
 
 ```bash
-uv run python -m clinical_trial_mcp.server
+uv run python -m biomed_evidence_mcp.server
 ```
 
 This is a **stdio** server: it starts, logs "server is up … waiting for an MCP
@@ -395,7 +395,7 @@ client", then sits idle until a client connects. That silence is expected —
 drive it with Claude Desktop or the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
 ```bash
-npx @modelcontextprotocol/inspector uv run python -m clinical_trial_mcp.server
+npx @modelcontextprotocol/inspector uv run python -m biomed_evidence_mcp.server
 ```
 
 ### 7. Connect Claude Desktop
@@ -435,7 +435,7 @@ One MCP-server entry per `source_id` — `core.server` reads `BIOMED_EVIDENCE_SO
 
 `--directory` makes `uv` use this project's venv and resolve its `.env`. `UV_NATIVE_TLS=1` is harmless off-proxy. Postgres must be running and `.env` filled in. Restart Claude Desktop fully (system tray quit) for new config to load.
 
-The legacy `python -m clinical_trial_mcp.server` entry point still works as a compat shim — it's equivalent to `core.server` with `BIOMED_EVIDENCE_SOURCE=clinical`.
+The legacy `python -m biomed_evidence_mcp.server` entry point still works as a compat shim — it's equivalent to `core.server` with `BIOMED_EVIDENCE_SOURCE=clinical`.
 
 ---
 
@@ -677,7 +677,7 @@ mcp-suite/
 │   ├── eval_retrieval.py              # scores retrieval, writes docs/EVAL_RETRIEVAL.md
 │   ├── export_demo_corpus.py          # regenerates the bundled demo slice
 │   └── ingest_trials.py               # compat shim → core.ingest --source clinical
-├── src/clinical_trial_mcp/            # Phase-A compat shims for old entry-point commands
+├── src/biomed_evidence_mcp/            # Phase-A compat shims for old entry-point commands
 ├── docs/                              # media/ clips, ENGINEERING_NOTES, EVAL_RETRIEVAL, mcp-suite/ strategy
 └── mcp_platform/                      # authorization gate + hashed API-key CLI (off by default)
 ```

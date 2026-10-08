@@ -1,7 +1,7 @@
 [project]
-name = "clinical-trial-mcp"
+name = "biomed-evidence-mcp"
 version = "0.1.0"
-description = "mcp-suite — a shared core + per-vertical MCP servers over curated life-sciences data (clinical server in v0.1; openFDA, PubMed planned). Distribution name kept as 'clinical-trial-mcp' through Phase A to preserve existing claude_desktop_config.json entries; will rename once a publishable package story exists."
+description = "biomed-evidence-mcp — a shared core plus per-vertical MCP servers over curated biomedical data (ClinicalTrials.gov, four openFDA sources, PubMed), with a relational staging layer beside the retrieval store. Not published to PyPI; installed from source."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 # Per-server extras: enable selective installs once verticals add deps
-# beyond what core needs (e.g. `pip install clinical-trial-mcp[openfda]`).
+# beyond what core needs (e.g. `pip install biomed-evidence-mcp[openfda]`).
 # Empty during Phase A — declared so the structure is visible early.
 [project.optional-dependencies]
 clinical = []
@@ -40,7 +40,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/clinical_trial_mcp", "core", "servers", "staging"]
+packages = ["src/biomed_evidence_mcp", "core", "servers", "staging"]
 
 [tool.ruff]
 line-length = 100
@@ -55,7 +55,7 @@ testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/clinical_trial_mcp", "core", "servers", "staging"]
+files = ["src/biomed_evidence_mcp", "core", "servers", "staging"]
 # Third-party libs (mcp, voyageai, curl_cffi, asyncpg, anthropic) ship no
 # stubs — don't fail the gate on their missing types.
 ignore_missing_imports = true
